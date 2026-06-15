@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "games",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["/Users/LukasJennings/games/factory/serve.py", "8000"],
+      "port": 8000
+    }
+  ]
+}

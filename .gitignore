@@ -1,0 +1,24 @@
+# secrets & local
+.env
+.env.*
+!.env.example
+
+# os / editor
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
+
+# build / deploy artifacts
+dist/
+*.zip
+node_modules/
+
+# third-party SDK clone (has its own git repo) — used when we wire multi-portal publishing
+/playgama-bridge
+
+# python (factory orchestrator)
+factory/__pycache__/
+*.pyc
+.venv/

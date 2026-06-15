@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0c1020" />
+  <title>Arcade</title>
+  <style>
+    :root { --bg:#0c1020; --bg2:#141a30; --panel:#1b2342; --text:#eef2ff; --muted:#8b95bf; --accent:#5b8cff; --accent2:#7af0d0; }
+    * { box-sizing: border-box; }
+    html, body { margin:0; min-height:100%; background:radial-gradient(120% 120% at 50% 0%, var(--bg2), var(--bg) 60%); color:var(--text); font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 48px 20px 64px; }
+    h1 { font-size: clamp(34px, 9vw, 56px); font-weight: 900; letter-spacing: 2px; margin: 0 0 4px;
+         background: linear-gradient(120deg, var(--accent), var(--accent2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    p.sub { color: var(--muted); margin: 0 0 32px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
+    a.card { text-decoration: none; color: inherit; background: var(--panel); border-radius: 18px; padding: 22px;
+             display: flex; flex-direction: column; gap: 6px; box-shadow: 0 10px 30px rgba(0,0,0,.45);
+             transition: transform .12s ease, filter .15s ease; }
+    a.card:hover { transform: translateY(-3px); filter: brightness(1.1); }
+    .card .title { font-weight: 800; font-size: 22px; }
+    .card .tag { color: var(--muted); font-size: 13px; }
+    .card .play { margin-top: 10px; align-self: flex-start; font-weight: 800; font-size: 13px; padding: 7px 14px; border-radius: 10px;
+                  background: linear-gradient(120deg, var(--accent), var(--accent2)); color: #07101f; }
+    footer { margin-top: 40px; color: var(--muted); font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>ARCADE</h1>
+    <p class="sub">Small, snappy web games. More dropping soon.</p>
+    <div class="grid">
+      <a class="card" href="games/fuse/">
+        <span class="title">Fuse</span>
+        <span class="tag">Merge puzzle · swipe to reach 2048</span>
+        <span class="play">Play</span>
+      </a>
+    </div>
+    <footer>Built with the Game Factory.</footer>
+  </div>
+</body>
+</html>
