@@ -4,39 +4,563 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#0c1020" />
-  <title>Arcade</title>
+  <title>Prism Play — Ten Browser Games</title>
+  <meta name="description" content="Ten browser games. No installs. No accounts. Pick one and play." />
+  <meta property="og:title" content="Prism Play" />
+  <meta property="og:description" content="Ten browser games. No installs. No accounts. Pick one and play." />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Prism Play" />
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"Prism Play","description":"Ten browser games. No installs, no accounts.","url":"/"}</script>
   <style>
-    :root { --bg:#0c1020; --bg2:#141a30; --panel:#1b2342; --text:#eef2ff; --muted:#8b95bf; --accent:#5b8cff; --accent2:#7af0d0; }
-    * { box-sizing: border-box; }
-    html, body { margin:0; min-height:100%; background:radial-gradient(120% 120% at 50% 0%, var(--bg2), var(--bg) 60%); color:var(--text); font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
-    .wrap { max-width: 760px; margin: 0 auto; padding: 48px 20px 64px; }
-    h1 { font-size: clamp(34px, 9vw, 56px); font-weight: 900; letter-spacing: 2px; margin: 0 0 4px;
-         background: linear-gradient(120deg, var(--accent), var(--accent2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
-    p.sub { color: var(--muted); margin: 0 0 32px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
-    a.card { text-decoration: none; color: inherit; background: var(--panel); border-radius: 18px; padding: 22px;
-             display: flex; flex-direction: column; gap: 6px; box-shadow: 0 10px 30px rgba(0,0,0,.45);
-             transition: transform .12s ease, filter .15s ease; }
-    a.card:hover { transform: translateY(-3px); filter: brightness(1.1); }
-    .card .title { font-weight: 800; font-size: 22px; }
-    .card .tag { color: var(--muted); font-size: 13px; }
-    .card .play { margin-top: 10px; align-self: flex-start; font-weight: 800; font-size: 13px; padding: 7px 14px; border-radius: 10px;
-                  background: linear-gradient(120deg, var(--accent), var(--accent2)); color: #07101f; }
-    footer { margin-top: 40px; color: var(--muted); font-size: 12px; }
+    /* ── Tokens ─────────────────────────────────────────────────── */
+    :root {
+      --bg:      #0c1020;
+      --bg2:     #141a30;
+      --panel:   #1b2342;
+      --panel2:  #212a50;
+      --text:    #eef2ff;
+      --muted:   #8b95bf;
+      --accent:  #5b8cff;
+      --accent2: #7af0d0;
+      --border:  rgba(255,255,255,.07);
+      --shadow-sm:  0 2px 8px rgba(0,0,0,.35);
+      --shadow-md:  0 8px 28px rgba(0,0,0,.50);
+      --shadow-lg:  0 16px 48px rgba(0,0,0,.60);
+      --radius-sm:  10px;
+      --radius-md:  16px;
+      --radius-lg:  22px;
+      --ease-out-quart: cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    /* ── Reset ───────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; text-decoration: none; }
+
+    /* ── Page shell ──────────────────────────────────────────────── */
+    .page {
+      background: radial-gradient(130% 120% at 50% -5%, var(--bg2) 0%, var(--bg) 55%);
+      min-height: 100vh;
+    }
+    .wrap {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 52px 20px 80px;
+    }
+
+    /* ── Hero ────────────────────────────────────────────────────── */
+    .hero { margin-bottom: 48px; }
+
+    .logo {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .logo-prism {
+      width: 32px;
+      height: 32px;
+      flex-shrink: 0;
+    }
+    .logo-wordmark {
+      font-size: clamp(13px, 3vw, 15px);
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(40px, 10vw, 72px);
+      font-weight: 900;
+      letter-spacing: -0.02em;
+      line-height: 1;
+      text-wrap: balance;
+      color: var(--text);
+    }
+    h1 em {
+      font-style: normal;
+      color: var(--accent);
+    }
+
+    .hero-sub {
+      margin: 0 0 28px;
+      font-size: clamp(15px, 2.5vw, 18px);
+      color: var(--muted);
+      line-height: 1.55;
+      max-width: 48ch;
+    }
+
+    .hero-stats {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+    .stat {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .stat-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent2);
+      flex-shrink: 0;
+    }
+    .stat-dot.orange { background: #ffb347; }
+    .stat-dot.pink   { background: #ff8ed4; }
+
+    /* ── Filter strip ────────────────────────────────────────────── */
+    .filter-strip {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 28px;
+    }
+    .chip {
+      padding: 7px 16px;
+      border-radius: 999px;
+      border: 1.5px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .chip:hover {
+      color: var(--text);
+      border-color: rgba(255,255,255,.18);
+    }
+    .chip.active {
+      background: var(--panel2);
+      border-color: var(--accent);
+      color: var(--text);
+    }
+    .chip:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    /* ── Game count label ────────────────────────────────────────── */
+    .section-label {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 16px;
+      transition: opacity 160ms ease;
+    }
+
+    /* ── Grid ────────────────────────────────────────────────────── */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 14px;
+    }
+
+    /* ── Card ────────────────────────────────────────────────────── */
+    a.card {
+      display: flex;
+      flex-direction: column;
+      background: var(--panel);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      border: 1.5px solid var(--border);
+      box-shadow: var(--shadow-md);
+      position: relative;
+      overflow: hidden;
+      transition:
+        transform 140ms var(--ease-out-quart),
+        box-shadow 140ms var(--ease-out-quart),
+        border-color 140ms ease;
+      /* stagger reveal */
+      animation: cardReveal 420ms var(--ease-out-quart) both;
+      animation-delay: calc(var(--i, 0) * 40ms + 80ms);
+    }
+    a.card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-lg), 0 0 0 1.5px var(--gc, var(--accent));
+      border-color: var(--gc, var(--accent));
+    }
+    a.card:focus-visible {
+      outline: 2px solid var(--gc, var(--accent));
+      outline-offset: 3px;
+    }
+    a.card.hidden {
+      display: none;
+    }
+
+    /* subtle top color band */
+    a.card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: var(--gc, var(--accent));
+      opacity: .7;
+    }
+
+    /* ── DAILY badge ─────────────────────────────────────────────── */
+    .badge-daily {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      padding: 3px 9px;
+      border-radius: 999px;
+      background: var(--gc, var(--accent));
+      color: #07101f;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    /* ── Card content ────────────────────────────────────────────── */
+    .card-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--gc, var(--accent)) 16%, transparent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      margin-bottom: 14px;
+      flex-shrink: 0;
+    }
+
+    .card-genre {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+      color: var(--gc, var(--accent));
+      margin-bottom: 6px;
+    }
+
+    .card-title {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -.01em;
+      color: var(--text);
+      margin-bottom: 7px;
+      line-height: 1.1;
+    }
+
+    .card-tag {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.45;
+      flex: 1;
+      margin-bottom: 18px;
+      /* clamp long taglines to 2 lines */
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .card-play {
+      align-self: flex-start;
+      padding: 8px 18px;
+      border-radius: var(--radius-sm);
+      background: color-mix(in srgb, var(--gc, var(--accent)) 18%, transparent);
+      border: 1.5px solid color-mix(in srgb, var(--gc, var(--accent)) 50%, transparent);
+      color: var(--gc, var(--accent));
+      font: inherit;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: .03em;
+      transition: background 120ms ease, border-color 120ms ease;
+    }
+    a.card:hover .card-play {
+      background: color-mix(in srgb, var(--gc, var(--accent)) 28%, transparent);
+      border-color: var(--gc, var(--accent));
+    }
+
+    /* ── Empty state ─────────────────────────────────────────────── */
+    .empty {
+      display: none;
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 48px 0;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    /* ── Footer ──────────────────────────────────────────────────── */
+    footer {
+      margin-top: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .footer-brand {
+      font-weight: 700;
+      letter-spacing: .05em;
+    }
+    .footer-links {
+      display: flex;
+      gap: 20px;
+    }
+    .footer-links a {
+      color: var(--muted);
+      transition: color 100ms ease;
+    }
+    .footer-links a:hover { color: var(--text); }
+
+    /* ── Animations ──────────────────────────────────────────────── */
+    @keyframes cardReveal {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes heroFade {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .hero {
+      animation: heroFade 500ms var(--ease-out-quart) both;
+    }
+    .filter-strip {
+      animation: heroFade 500ms var(--ease-out-quart) 60ms both;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .hero, .filter-strip, a.card {
+        animation: none !important;
+      }
+    }
+
+    /* ── SVG prism logo ──────────────────────────────────────────── */
+    /* inline below */
+
+    /* ── Responsive ──────────────────────────────────────────────── */
+    @media (max-width: 480px) {
+      .wrap { padding: 36px 16px 60px; }
+      .grid { gap: 12px; }
+      .hero-stats { gap: 14px; }
+      footer { flex-direction: column; align-items: flex-start; }
+    }
   </style>
 </head>
 <body>
+<div class="page">
   <div class="wrap">
-    <h1>ARCADE</h1>
-    <p class="sub">Small, snappy web games. More dropping soon.</p>
-    <div class="grid">
-      <a class="card" href="games/fuse/">
-        <span class="title">Fuse</span>
-        <span class="tag">Merge puzzle · swipe to reach 2048</span>
-        <span class="play">Play</span>
-      </a>
+
+    <!-- Hero -->
+    <header class="hero">
+      <div class="logo" aria-hidden="true">
+        <svg class="logo-prism" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <polygon points="16,2 30,28 2,28" fill="none" stroke="#5b8cff" stroke-width="2" stroke-linejoin="round"/>
+          <line x1="16" y1="2" x2="16" y2="28" stroke="#7af0d0" stroke-width="1.5" stroke-opacity=".6"/>
+          <polygon points="16,2 30,28 16,28" fill="#5b8cff" fill-opacity=".12"/>
+          <polygon points="16,2 16,28 2,28" fill="#7af0d0" fill-opacity=".08"/>
+        </svg>
+        <span class="logo-wordmark">Prism Play</span>
+      </div>
+
+      <h1>Ten games.<br><em>One tab.</em></h1>
+
+      <p class="hero-sub">Browser-native arcade. No installs, no accounts — just pick a game and go. A new puzzle resets every day.</p>
+
+      <div class="hero-stats" aria-label="Quick facts">
+        <span class="stat"><span class="stat-dot"></span>10 games live</span>
+        <span class="stat"><span class="stat-dot orange"></span>Daily puzzle</span>
+        <span class="stat"><span class="stat-dot pink"></span>Mobile-first</span>
+      </div>
+    </header>
+
+    <!-- Filter -->
+    <div class="filter-strip" role="radiogroup" aria-label="Filter by genre">
+      <button class="chip active" role="radio" aria-checked="true"  data-filter="all">All</button>
+      <button class="chip"        role="radio" aria-checked="false" data-filter="puzzle">Puzzle</button>
+      <button class="chip"        role="radio" aria-checked="false" data-filter="arcade">Arcade</button>
+      <button class="chip"        role="radio" aria-checked="false" data-filter="strategy">Strategy</button>
+      <button class="chip"        role="radio" aria-checked="false" data-filter="daily">Daily</button>
     </div>
-    <footer>Built with the Game Factory.</footer>
+
+    <!-- Count label -->
+    <p class="section-label" id="count-label">10 games</p>
+
+    <!-- Grid -->
+    <div class="grid" id="grid">
+
+      <a class="card" href="games/fuse/"
+         data-genre="puzzle"
+         style="--gc:#5b8cff; --i:0;">
+        <div class="card-icon">🧩</div>
+        <span class="card-genre">Puzzle</span>
+        <div class="card-title">Fuse</div>
+        <div class="card-tag">Swipe tiles into each other. When two match, they fuse. Chase 2048.</div>
+        <span class="card-play">Play →</span>
+      </a>
+
+      <a class="card" href="games/stack/"
+         data-genre="arcade"
+         style="--gc:#7c6af7; --i:1;">
+        <div class="card-icon">🏗️</div>
+        <span class="card-genre">Arcade</span>
+        <div class="card-title">Stack</div>
+        <div class="card-tag">A block slides back and forth. Tap to drop it. Each floor narrows your margin.</div>
+        <span class="card-play">Play →</span>
+      </a>
+
+      <a class="card" href="games/orbit/"
+         data-genre="puzzle"
+         style="--gc:#7af0d0; --i:2;">
+        <div class="card-icon">🌌</div>
+        <span class="card-genre">Puzzle</span>
+        <div class="card-title">Orbit</div>
+        <div class="card-tag">Drop cosmic orbs into the jar. Same tier, same touch — they merge into the next.</div>
+        <span class="card-play">Play →</span>
+      </a>
+
+      <a class="card" href="games/match3/"
+         data-genre="puzzle"
+         style="--gc:#a06af7; --i:3;">
+        <div class="card-icon">💎</div>
+        <span class="card-genre">Puzzle</span>
+        <div class="card-title">Gem Drop</div>
+        <div class="card-tag">Swap adjacent gems to line up three or more. Chains score bigger. No timer, pure logic.</div>
+        <span class="card-play">Play →</span>
+      </a>
+
+      <a class="card" href="games/bubble/"
+         data-genre="arcade"
+         style="--gc:#ff8ed4; --i:4;">
+        <div class="card-icon">🫧</div>
+        <span class="card-genre">Arcade</span>
+        <div class="card-title">Burst</div>
+        <div class="card-tag">Aim at the ceiling. Fire to pop groups of three. The stack drops a row every six shots.</div>
+        <span class="card-play">Play →</span>
+      </a>
+
+      <a class="card" href="games/idle/"
+         data-genre="arcade"
+         style="--gc:#ffb347; --i:5;">
+        <div class="card-icon">⛏️</div>
+        <span class="card-genre">Arcade</span>
+        <div class="card-title">Coin Forge</div>
+        <div class="card-tag">Tap once, then never stop. Hire helpers. Watch the numbers run away from you.</div>
+        <span class="card-play">Play →</span>
+      </a>
+
+      <a class="card" href="games/io/"
+         data-genre="arcade"
+         style="--gc:#3ee6b8; --i:6;">
+        <div class="card-icon">🟢</div>
+        <span class="card-genre">Arcade</span>
+        <div class="card-title">Splat</div>
+        <div class="card-tag">Eat what's smaller. Dodge what's bigger. Grow until you own the arena.</div>
+        <span class="card-play">Play →</span>
+      </a>
+
+      <a class="card" href="games/runner/"
+         data-genre="arcade"
+         style="--gc:#4fd6ff; --i:7;">
+        <div class="card-icon">🏎️</div>
+        <span class="card-genre">Arcade</span>
+        <div class="card-title">Dash Lanes</div>
+        <div class="card-tag">Three lanes, one survivor. Tap left or right. The traffic doesn't slow down.</div>
+        <span class="card-play">Play →</span>
+      </a>
+
+      <a class="card" href="games/equate/"
+         data-genre="daily puzzle"
+         style="--gc:#4fe0c8; --i:8;">
+        <div class="badge-daily" aria-label="Daily game">Daily</div>
+        <div class="card-icon">🔢</div>
+        <span class="card-genre">Daily Puzzle</span>
+        <div class="card-title">Equate</div>
+        <div class="card-tag">One equation hidden each day. Six guesses. Everyone gets the same board.</div>
+        <span class="card-play">Play →</span>
+      </a>
+
+      <a class="card" href="games/td/"
+         data-genre="strategy"
+         style="--gc:#5ef79b; --i:9;">
+        <div class="card-icon">🛡️</div>
+        <span class="card-genre">Strategy</span>
+        <div class="card-title">Outpost</div>
+        <div class="card-tag">Place turrets. Upgrade them. The waves don't stop — but neither do you.</div>
+        <span class="card-play">Play →</span>
+      </a>
+
+      <p class="empty" id="empty-state">No games match that filter.</p>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+      <span class="footer-brand">Prism Play &copy; <span id="year"></span></span>
+      <nav class="footer-links" aria-label="Footer navigation">
+        <a href="/">All Games</a>
+        <a href="games/equate/">Today's Puzzle</a>
+      </nav>
+    </footer>
+
   </div>
+</div>
+
+<script>
+  // Current year
+  document.getElementById('year').textContent = new Date().getFullYear();
+
+  // Genre filter
+  var chips   = document.querySelectorAll('.chip');
+  var cards   = document.querySelectorAll('a.card');
+  var label   = document.getElementById('count-label');
+  var empty   = document.getElementById('empty-state');
+
+  chips.forEach(function(chip) {
+    chip.addEventListener('click', function() {
+      var filter = this.dataset.filter;
+
+      // Toggle chip state
+      chips.forEach(function(c) {
+        c.classList.remove('active');
+        c.setAttribute('aria-checked', 'false');
+      });
+      this.classList.add('active');
+      this.setAttribute('aria-checked', 'true');
+
+      // Show / hide cards
+      var visible = 0;
+      cards.forEach(function(card) {
+        var genre = card.dataset.genre || '';
+        var show = filter === 'all' || genre.indexOf(filter) !== -1;
+        card.classList.toggle('hidden', !show);
+        if (show) visible++;
+      });
+
+      // Update count label
+      label.textContent = visible === 10 ? '10 games' : visible + (visible === 1 ? ' game' : ' games');
+      empty.style.display = visible === 0 ? 'block' : 'none';
+    });
+  });
+</script>
 </body>
 </html>

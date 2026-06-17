@@ -4,19 +4,21 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#0c1020" />
-  <title>Fuse — merge puzzle</title>
+  <meta name="description" content="Swipe to fuse matching tiles and chase 2048. A browser puzzle game — no install needed." />
+  <meta property="og:title" content="Fuse — Prism Play" />
+  <meta property="og:description" content="Swipe to fuse matching tiles and chase 2048." />
+  <title>Fuse — merge puzzle · Prism Play</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div id="app">
     <header class="hud">
-      <div class="brand">FUSE</div>
+      <a class="brand" href="../../" aria-label="Back to Prism Play">FUSE</a>
       <div class="scores">
         <div class="score"><span class="label">SCORE</span><span id="score">0</span></div>
         <div class="score"><span class="label">BEST</span><span id="best">0</span></div>
       </div>
     </header>
-
     <div class="subbar">
       <div class="streak" id="streak">🔥 0&nbsp;day streak</div>
       <div class="controls">
@@ -24,7 +26,6 @@
         <button id="new" class="text-btn">New</button>
       </div>
     </div>
-
     <div class="board-wrap">
       <canvas id="game" aria-label="Fuse game board"></canvas>
       <div id="overlay" class="overlay hidden" role="dialog" aria-modal="true">
@@ -39,10 +40,8 @@
         </div>
       </div>
     </div>
-
     <p class="hint">Swipe or use <b>arrow keys</b> — merge matching tiles to reach <b>2048</b>.</p>
   </div>
-
   <script src="../../shared/juice.js?v=1"></script>
   <script src="../../shared/retention.js?v=1"></script>
   <script src="game.js?v=1"></script>

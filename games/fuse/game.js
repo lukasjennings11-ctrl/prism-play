@@ -376,6 +376,7 @@
   // expose a tiny hook so the headless playtest harness can drive the game
   window.__fuse = {
     move: move,
+    tick: function (n, dt) { dt = dt || 1 / 60; for (var i = 0; i < (n || 1); i++) update(dt); },
     state: function () {
       var grid = [];
       for (var r = 0; r < N; r++) { grid.push([]); for (var c = 0; c < N; c++) grid[r].push(cells[r][c] ? cells[r][c].value : 0); }

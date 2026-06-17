@@ -1,0 +1,629 @@
+{
+  "version": 1,
+  "skills": {
+    "ab-test-setup": {
+      "source": "ayrshare/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/ab-test-setup/SKILL.md",
+      "computedHash": "7e2fe0f8cfac9d70ebdfe32a99aae391b7b5b6d491c7a2bc0107b8e77eb91d9a"
+    },
+    "adversarial-review": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/multimodel/adversarial-review/SKILL.md",
+      "computedHash": "376f042e0aafccf976806e8808cd39d18faa415658940bd79eee782c153f81b9"
+    },
+    "adversarial-spec": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/multimodel/adversarial-spec/SKILL.md",
+      "computedHash": "5d47b21a243f679ee17a705a465aa51fa176f861c03f0cfc949535f6634dcca4"
+    },
+    "agent-guard": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/security/agent-guard/SKILL.md",
+      "computedHash": "4d054638d8677a3077ca7b35e209683c7a2684ef5dec0cce2f3a813d37585236"
+    },
+    "analytics-tracking": {
+      "source": "ayrshare/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/analytics-tracking/SKILL.md",
+      "computedHash": "3e66f9bc97873e9d18db5fb064cafd81228ea6532d6402d80fdd88a21432a4b1"
+    },
+    "apify": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/data/apify/SKILL.md",
+      "computedHash": "3233477beb37e2c72b8aa0cc72daab1007d5bb5fe88d48957bffe3c2e750a6a7"
+    },
+    "app-store": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/testing/app-store/SKILL.md",
+      "computedHash": "9bce6b638120d134e3f6f12a025b724f435f857f5f6889b2f0dc14f33a6d6b4e"
+    },
+    "auth-patterns": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/security/auth-patterns/SKILL.md",
+      "computedHash": "e379fba95838567cce20bcacffc75af0846eff9c7a19f19c382f255cf6933e0b"
+    },
+    "backend": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/development/backend/SKILL.md",
+      "computedHash": "76c08df3ba583e6d831826d06815652f7a32de6139b47618f85f6f88a4d5d11d"
+    },
+    "batch": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/quality/batch/SKILL.md",
+      "computedHash": "791df814fb58f0a3d5f6bd0349f9aea6eec17037ee43b58d8f957528e9de084a"
+    },
+    "brainstorming": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/brainstorming/SKILL.md",
+      "computedHash": "26a8eb33d548f0c4ead9e7bc13a90c3853398d30345c651245a61a12b869f130"
+    },
+    "browser-testing": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/testing/browser-testing/SKILL.md",
+      "computedHash": "37cb2286233bd9b5866a6f95c582c40a88be7382f1206474a757c8a98d67ed3b"
+    },
+    "cicd": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/infrastructure/cicd/SKILL.md",
+      "computedHash": "63cb38b1f742ab2d16d3fe0b05dd73295020d5ab5a235d52d4a085d68d4553b5"
+    },
+    "ckm:banner-design": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/banner-design/SKILL.md",
+      "computedHash": "7bbf0f48704f5c40436e3466d7ef9bcbafe35a84eb8c3e9d0ab76408a57bac5c"
+    },
+    "ckm:brand": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/brand/SKILL.md",
+      "computedHash": "89c8579d232e6e14152a8b898d49eb94f59aa7288ed8ca103cd3b38cb082e00a"
+    },
+    "ckm:design": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/design/SKILL.md",
+      "computedHash": "2020e511bb6fbc1dbc233d1da335ec7e8cb553d6e321d34cec4555efcc9ec8f1"
+    },
+    "ckm:design-system": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/design-system/SKILL.md",
+      "computedHash": "49b8308dc428c66b0983f4b3d102c522c495f62538121064d1e82a040b1afd2c"
+    },
+    "ckm:slides": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/slides/SKILL.md",
+      "computedHash": "6d753831914ed6703b7222153f2710efc2f195f0ab24fd2119c76c2b6d1a6ba1"
+    },
+    "ckm:ui-styling": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/ui-styling/SKILL.md",
+      "computedHash": "9ae38e4e201f338b6150e462b98a2db0f2ae7c180c77e8cfb1d33eba9d33bf33"
+    },
+    "claude-context": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/development/claude-context/SKILL.md",
+      "computedHash": "be10b52fc411a0e78573def2ba99716641eb968a5c80f4f5dbac15752f9031ef"
+    },
+    "code-review": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/quality/code-review/SKILL.md",
+      "computedHash": "a6974dbeecded7485db58440b715d51f51183a896b388ccbb0322a0ede7ee516"
+    },
+    "code-security": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/security/code-security/SKILL.md",
+      "computedHash": "703e0cc5d44f65e370f9e3cc9bed488c5ac9768d6e08b20080a8b8ee42d0615d"
+    },
+    "competitor-alternatives": {
+      "source": "ayrshare/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/competitor-alternatives/SKILL.md",
+      "computedHash": "fed933cf3a483c8553e98d54d19ca5565dd3fcc1aebb6ef8ea36aa68fb7f26f1"
+    },
+    "components": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/design/components/SKILL.md",
+      "computedHash": "25609c3f321039f1694a0341388c33433c8ffb1f2d2235127b80eefa5ffc6c95"
+    },
+    "content-strategy": {
+      "source": "ayrshare/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/content-strategy/SKILL.md",
+      "computedHash": "e49701042afc0f6c8e035022322e95bd8b7922c063431ae86f08da5f4f771751"
+    },
+    "copy-editing": {
+      "source": "ayrshare/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/copy-editing/SKILL.md",
+      "computedHash": "4e3260f053e87792b9732f0cab12f75548e979d93513f9652465e0f095af244b"
+    },
+    "copywriting": {
+      "source": "ayrshare/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/copywriting/SKILL.md",
+      "computedHash": "8572a200869f6032fa7815a64e51aa15d6cce566e762dae5e85dd072c1a41b49"
+    },
+    "cost-estimate": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/business/cost-estimate/SKILL.md",
+      "computedHash": "bf740103be389d5b1ff5e19229eafe202d9ffbaa7636bda999e38cdee749eefa"
+    },
+    "council": {
+      "source": "sherifkozman/the-llm-council",
+      "sourceType": "github",
+      "skillPath": "skills/council/SKILL.md",
+      "computedHash": "797cad5475f46d01771c97d432889e1491469015d178456c1f8becc39eedeb16"
+    },
+    "data-analysis": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/data/data-analysis/SKILL.md",
+      "computedHash": "0d39409103041571933608b5c9be2d171e7480e3c15b63e18210c1f43bba15e7"
+    },
+    "database": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/development/database/SKILL.md",
+      "computedHash": "be17dd286550a4977a189f861e35fd7746120b67df840832e2d62c276bca5d38"
+    },
+    "deploy": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/infrastructure/deploy/SKILL.md",
+      "computedHash": "aea46ab2abd113628e52427b32cd29d3ad28d30e23f05aa70ff3f303b0d88dab"
+    },
+    "dispatching-parallel-agents": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/dispatching-parallel-agents/SKILL.md",
+      "computedHash": "85df55d2235a7623b315dac4bc340c14a37dcdc57c869c80a829e1a53a174689"
+    },
+    "dispute": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/workflow/dispute/SKILL.md",
+      "computedHash": "1fe73e746496deb617e3ed0618a1f07681b2636db491544937045e284d77cfd3"
+    },
+    "dns-ssl": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/infrastructure/dns-ssl/SKILL.md",
+      "computedHash": "2c0974617152da303b3504ca164ee5b9325ceafd6dfa06dd9136b1e5dabf05d5"
+    },
+    "docker": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/infrastructure/docker/SKILL.md",
+      "computedHash": "751905bf174189ece43c49e8e86cb0f7ea5c1dec69705f7518895696656ec00c"
+    },
+    "e2e-tests": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/testing/e2e-tests/SKILL.md",
+      "computedHash": "cd23a161e9203ec2b7b5f000cca79da1372ba100e2cdd73cf940c3081ab2335a"
+    },
+    "email-sequence": {
+      "source": "ayrshare/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/email-sequence/SKILL.md",
+      "computedHash": "b8832ec7753aa114211f90425d4da75f323fe87f648a550828ade3037c145aca"
+    },
+    "emil-design-eng": {
+      "source": "emilkowalski/skill",
+      "sourceType": "github",
+      "skillPath": "skills/emil-design-eng/SKILL.md",
+      "computedHash": "8bdf9e4e6de7a4969147bf4828a4ad2c5aacd9fba4b690b250a85e0467ca387d"
+    },
+    "executing-plans": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/executing-plans/SKILL.md",
+      "computedHash": "d3e5b64b97d4713e3a7f33625cae12ed9305898d85a1c6309f46765c39a9d789"
+    },
+    "finishing-a-development-branch": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/finishing-a-development-branch/SKILL.md",
+      "computedHash": "aa2632ed96df59c36348bd8f8ec1ff0fb0c5cc68b60691834687bf4cedc6be3f"
+    },
+    "form-cro": {
+      "source": "ayrshare/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/form-cro/SKILL.md",
+      "computedHash": "e78c6098480ebb1d24985d7a16930868bc8d0962078182c8baa698e5def78774"
+    },
+    "free-tool-strategy": {
+      "source": "ayrshare/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/free-tool-strategy/SKILL.md",
+      "computedHash": "52dbcf576e0576e2985466e5162a2cd68d92f3ab7fc7441a3feb4263b1a241f7"
+    },
+    "frontend": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/development/frontend/SKILL.md",
+      "computedHash": "0970e5e350ccf3b569ce4878cf6a2ef91f8d8387da115cc85c4b81ec44097d1e"
+    },
+    "gemini-advisor": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/multimodel/gemini-advisor/SKILL.md",
+      "computedHash": "efdadd53c6d6062abe3e277fd4f1d7b444859c38dbc364e2fd0cc096208059e8"
+    },
+    "gemini-mcp": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/multimodel/gemini-mcp/SKILL.md",
+      "computedHash": "fe663fd5f484cd8e57d7a7822fa2cb17929c799c552ba23cdec21b73e5ca4fbc"
+    },
+    "git-guardrails": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/security/git-guardrails/SKILL.md",
+      "computedHash": "8d881a9e71c22f1bca6909692ac168ad2256c542c0ae3e5d26362ee09fb6f6db"
+    },
+    "git-guardrails-claude-code": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/security/git-guardrails-external/SKILL.md",
+      "computedHash": "e919e6bc1b868e087d2fa13a51d3085342dfec50dcc9bd78864ddde1c33d9a93"
+    },
+    "gpt-advisor": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/multimodel/gpt-advisor/SKILL.md",
+      "computedHash": "cc0014da7569ebd61132a3fa62e5bb7554ff36538a9f241ede04d1e955f90b01"
+    },
+    "graphiti": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/data/graphiti/SKILL.md",
+      "computedHash": "c50fce06051df7f6830911606c7b9e56646ffecfcc7874d6245550bb728eced3"
+    },
+    "instructor": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/infrastructure/instructor/SKILL.md",
+      "computedHash": "6d7e3befdea3a668d68737e1194ff8a0a3732298cdf37a85803a239ce881f891"
+    },
+    "integration": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/quality/integration/SKILL.md",
+      "computedHash": "f86b9d54cc9f62eeb0950adaba5cbbe2d2141e90184b4097b15e420150ec86fe"
+    },
+    "interview": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/workflow/interview/SKILL.md",
+      "computedHash": "f875b18ab0c27ae79da5b6ab1949e8b4d07380b5010e6a20ad0554054f54f62d"
+    },
+    "launch-strategy": {
+      "source": "ayrshare/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/launch-strategy/SKILL.md",
+      "computedHash": "bcf7c5690e6b274167c9cbb83386ff012112c480751ecc6b18495e5732159ff8"
+    },
+    "llm-council": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/multimodel/llm-council/SKILL.md",
+      "computedHash": "5c6c2022fe1de7760749f0404059983cc4b56d3f2b60735171ab7781080d6e99"
+    },
+    "local-models": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/multimodel/local-models/SKILL.md",
+      "computedHash": "e6b434350a083fe54fda1b15aa3bb83fb6ac2826c2f3ce87dfc44674714506af"
+    },
+    "marketing": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/business/marketing/SKILL.md",
+      "computedHash": "69ac1c96fb2297413be7b74ebacae72f2cc60407e20dfa80f837488f72545d93"
+    },
+    "marketing-ideas": {
+      "source": "ayrshare/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/marketing-ideas/SKILL.md",
+      "computedHash": "9718cc39a861936b08ab18bd564a53e2182cff770baf747c34dcb3e3d7a32f5c"
+    },
+    "marketing-psychology": {
+      "source": "ayrshare/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/marketing-psychology/SKILL.md",
+      "computedHash": "08b842bec992cf13ee61d4b1c206e8e6d9152cb0ba3a028ef875166be20c047b"
+    },
+    "ml-training": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/ai-training/ml-training/SKILL.md",
+      "computedHash": "9d15ca5da0984e446a62e6a50e180a89efda159b19319833790276d7fdbf6ddc"
+    },
+    "mobile": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/development/mobile/SKILL.md",
+      "computedHash": "c2ec65887de262a407fae5c804f0c6a84826470b8d6d90411d351fafa21dc57c"
+    },
+    "mobile-design": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/design/mobile-design/SKILL.md",
+      "computedHash": "270a0cf568d828cb82ba6560b78d36c697f0ac34b1381ccfdd23c0ae3040caad"
+    },
+    "monitoring": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/infrastructure/monitoring/SKILL.md",
+      "computedHash": "0dcff549bbb366ad644544c7961514aa98686297b245746295eaf9a9e04fa216"
+    },
+    "nimble": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/data/nimble/SKILL.md",
+      "computedHash": "f0778772590d98c5453ba9e6f2e897e841318e27205cfbe70b229df50b8362e0"
+    },
+    "onboarding-cro": {
+      "source": "ayrshare/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/onboarding-cro/SKILL.md",
+      "computedHash": "ea075be664fe77cfee8c074540fd88213f2e31ed39787ae02082d19fc43b48fa"
+    },
+    "page-cro": {
+      "source": "ayrshare/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/page-cro/SKILL.md",
+      "computedHash": "23cc8d7a10674586d432f56c5aa6709d5b3180e97e4f885dac0d545682e5ecc9"
+    },
+    "paid-ads": {
+      "source": "ayrshare/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/paid-ads/SKILL.md",
+      "computedHash": "123e5727f01795dc41e1e0724ac1d2f94d9e2727c6b08b603242e75910bf0c48"
+    },
+    "paywall-upgrade-cro": {
+      "source": "ayrshare/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/paywall-upgrade-cro/SKILL.md",
+      "computedHash": "90fd522fbdf87327beca0d1e0729ecad3acd833f90e52e1dd84f405dfe116441"
+    },
+    "planning": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/workflow/planning/SKILL.md",
+      "computedHash": "b98bd3a6a72a7c8c60443cb1cbd393cacf63685a2b7d9490e525752ce5fec1a1"
+    },
+    "popup-cro": {
+      "source": "ayrshare/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/popup-cro/SKILL.md",
+      "computedHash": "d3a71fc81f4165b41c341ba0a2b45164475851f4a31951424b4c1e782fbe2073"
+    },
+    "pricing-strategy": {
+      "source": "ayrshare/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/pricing-strategy/SKILL.md",
+      "computedHash": "8767dd7523b3183876030d1aaf6ea702806edf24b66b4a0b50d73c0f6e3e1c5f"
+    },
+    "product": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/business/product/SKILL.md",
+      "computedHash": "3ba477f25c121be1cfd4a6c47802e08f572e6d606337acaa1cf3055d959f74a8"
+    },
+    "product-marketing-context": {
+      "source": "ayrshare/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/product-marketing-context/SKILL.md",
+      "computedHash": "81387c26d53c9f642dc29ea0899e1f676fb51b3a3f4f662d2c9943a20821f39b"
+    },
+    "programmatic-seo": {
+      "source": "ayrshare/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/programmatic-seo/SKILL.md",
+      "computedHash": "a3ac098215969ccaa46d3704adde8c08a0b165adade4322668e0e56520f192f7"
+    },
+    "python": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/development/python/SKILL.md",
+      "computedHash": "272cc195a4e19a507185e1777ce22cfb1805065c889f45be97bac684e6eff418"
+    },
+    "react-bits": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/design/react-bits/SKILL.md",
+      "computedHash": "cc3d6fc849209abb89e75ab4d690838b3596113b3fe67e79ba31aac8587fa7df"
+    },
+    "react-doctor": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/development/react-doctor/SKILL.md",
+      "computedHash": "e3a83abcff27c8671f34a31ce402d75ab47f4aeaa8c54e77b25aede5c95ca167"
+    },
+    "receiving-code-review": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/receiving-code-review/SKILL.md",
+      "computedHash": "3f56080356c62e4f74a183d7371686babc661e41a952dc67a97c2c76fe8a9329"
+    },
+    "referral-program": {
+      "source": "ayrshare/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/referral-program/SKILL.md",
+      "computedHash": "69a33e610a0249ec7af65ce02092a55b723237bbbe9451ee74264634a4aae4ac"
+    },
+    "requesting-code-review": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/requesting-code-review/SKILL.md",
+      "computedHash": "cde520e9118d7e6b74b5ab0123cff2f68d9c07bddb3f82c997753b6126600aed"
+    },
+    "schema-markup": {
+      "source": "ayrshare/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/schema-markup/SKILL.md",
+      "computedHash": "0e65991cfe75ce9623c6150fa49c3bafc54796920fae5b6a6875ab6c3732bbec"
+    },
+    "scraping": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/data/scraping/SKILL.md",
+      "computedHash": "d0a1e868eddddb55ea88a3e514494ffc3df6d09d7a902c184c7ab57a70674f29"
+    },
+    "screen-coder": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/design/screen-coder/SKILL.md",
+      "computedHash": "0a594f738e42d7cd5d7a2f1e9a5a361afa86577a50c2381d23e9af6f6fc1c49d"
+    },
+    "secrets-guard": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/security/secrets-guard/SKILL.md",
+      "computedHash": "45ae90d36affa8d7734b8f238ce4e96e88cb2ae4f96d453183362602e50eae5f"
+    },
+    "self-improve": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/workflow/self-improve/SKILL.md",
+      "computedHash": "b368bf7e1701b46af073fb8934a60417c0073aef40ed175112dbcfbb1a00ee56"
+    },
+    "seo-audit": {
+      "source": "ayrshare/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/seo-audit/SKILL.md",
+      "computedHash": "e708ba7177775cb49e93ca9b624fba16ec4757e5740f1634279bd510418833f4"
+    },
+    "server-setup": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/infrastructure/server-setup/SKILL.md",
+      "computedHash": "0f4841891a62fd015bafbfa1602a611dde7be10e86a1a6a8082cc79f3a52a255"
+    },
+    "ship-safe": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/security/ship-safe/SKILL.md",
+      "computedHash": "d36c31355e1eacdb5590116693bb157bd5fb648d99ee772adf5595560fa3be2c"
+    },
+    "signup-flow-cro": {
+      "source": "ayrshare/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/signup-flow-cro/SKILL.md",
+      "computedHash": "2098ed9b95efefb40b895f6302f08be202cd5acea915e39e32559d2adfa4970b"
+    },
+    "simplify": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/quality/simplify/SKILL.md",
+      "computedHash": "6532b99eb6c76f1dd228ee77aa3cdce57922de6ed151f09c41af25d595401dc9"
+    },
+    "skill-creator": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/workflow/skill-creator/SKILL.md",
+      "computedHash": "b122f4d1e91aa1d83027e050b5b37c3156203ee85458d7b1360bc48167c9e02a"
+    },
+    "social-content": {
+      "source": "ayrshare/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/social-content/SKILL.md",
+      "computedHash": "3485991d7c3b97aae9dbce1bd9da575a36fa16621c90571d7391a6ef17754095"
+    },
+    "stop-slop": {
+      "source": "hardikpandya/stop-slop",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "617bf97d33162a6bd0da4f40a97aac589de58e5a6c9cf011ed6108992210e7cb"
+    },
+    "subagent-driven-development": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/subagent-driven-development/SKILL.md",
+      "computedHash": "036b1c4e106dfcffb5649be5e37408374e21cae486758e3ba12fdeb45484bb49"
+    },
+    "supply-chain": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/security/supply-chain/SKILL.md",
+      "computedHash": "2fe4d07dcbc2463b70bea3e1069272a03aad0e2caaa7edf9ec1c57900884c8c4"
+    },
+    "systematic-debugging": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/systematic-debugging/SKILL.md",
+      "computedHash": "792a368e074981d7e3138edb439e138489b2ac247cd1e5739fab52af680fb17b"
+    },
+    "test-driven-development": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/test-driven-development/SKILL.md",
+      "computedHash": "eee144aea35d783296d178017e9fe843c6d16cc8b240e106f5e50910f6caf329"
+    },
+    "ui-ux-pro-max": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/design/ui-ux-pro-max/SKILL.md",
+      "computedHash": "851395a086a88248f3f27cad61d8a6ec3873dc84aaf5c07e5a15ae1ff0c1dea9"
+    },
+    "unit-tests": {
+      "source": "neuron-one/GODMODE",
+      "sourceType": "github",
+      "skillPath": "skills/testing/unit-tests/SKILL.md",
+      "computedHash": "48285f41a4043a2f0276250c2f63e794184524b30fa3c201b79e3d021c2e694f"
+    },
+    "using-git-worktrees": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/using-git-worktrees/SKILL.md",
+      "computedHash": "212ad917e5543e84ea3adf4e3fab537675db976fdab05d4de432870e38b49e80"
+    },
+    "using-superpowers": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/using-superpowers/SKILL.md",
+      "computedHash": "75fb918d6ddbdfea9abe9d67a8d9214b1c95d9da58078c078b04fc658526c1cf"
+    },
+    "verification-before-completion": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/verification-before-completion/SKILL.md",
+      "computedHash": "9b446f0c7fe1cfb560b1d34439523b1a76d5f177290007b2c053a1c749a4a8ba"
+    },
+    "writing-plans": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/writing-plans/SKILL.md",
+      "computedHash": "b73b59d43c34c3fc225bfae419c458bb216af80df25fc0c545dfa7fd2a161722"
+    },
+    "writing-skills": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/writing-skills/SKILL.md",
+      "computedHash": "792e9d25ed6fbe38561202af07e6dd570060f745f9b8f4c71d6d13e7bc9597fa"
+    }
+  }
+}
