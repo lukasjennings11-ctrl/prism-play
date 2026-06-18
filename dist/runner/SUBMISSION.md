@@ -1,15 +1,15 @@
 # Runner — portal submission
 
-**Title:** Dash Lanes
+**Title:** Runner
 
-**Tagline:** Tap to switch lanes, dodge the traffic, outrun your best.
+**Tagline:** <one punchy line — fill in>
 
-**Controls:** Tap left/right side of the screen, or arrow keys, to switch lanes.
+**Controls:** Swipe / arrow keys (mobile + desktop).
 
-**Tags:** arcade, casual, runner, endless, mobile, highscore
+**Tags:** puzzle, casual, mobile, hypercasual, highscore
 
 **Description:**
-Three lanes, endless traffic, one tap to switch. Dodge oncoming blockers as the pace keeps ramping up, and rack up near-miss bonuses by sliding past obstacles in the next lane over. Simple controls, climbing speed, just one more run.
+<2-3 sentences. What you do, the one-more-go hook, the goal.>
 
 ## Where to upload
 - itch.io  (Kind: HTML, check 'mobile friendly', set viewport ~520x720, upload runner.zip)

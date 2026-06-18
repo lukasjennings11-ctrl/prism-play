@@ -2,14 +2,14 @@
 
 **Title:** Equate
 
-**Tagline:** Guess the hidden 8-character equation in 6 tries.
+**Tagline:** <one punchy line — fill in>
 
-**Controls:** Tap the on-screen number pad or type digits/operators; Enter to submit.
+**Controls:** Swipe / arrow keys (mobile + desktop).
 
-**Tags:** math, puzzle, daily, logic, casual, mobile, highscore
+**Tags:** puzzle, casual, mobile, hypercasual, highscore
 
 **Description:**
-A daily math puzzle — everyone solves the same hidden equation each day. Guess any true 8-character equation (like 12+34=46) and get color feedback per character: green for the right digit in the right spot, yellow for right digit wrong spot, gray for not in the equation at all. Six guesses, a shareable result grid, and unlimited Practice mode when you want more.
+<2-3 sentences. What you do, the one-more-go hook, the goal.>
 
 ## Where to upload
 - itch.io  (Kind: HTML, check 'mobile friendly', set viewport ~520x720, upload equate.zip)

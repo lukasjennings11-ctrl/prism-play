@@ -1,15 +1,15 @@
 # Td — portal submission
 
-**Title:** Outpost
+**Title:** Td
 
-**Tagline:** Build and upgrade turrets, hold the line against endless waves.
+**Tagline:** <one punchy line — fill in>
 
-**Controls:** Tap empty cells to build a turret, tap an existing turret to upgrade it.
+**Controls:** Swipe / arrow keys (mobile + desktop).
 
-**Tags:** strategy, tower-defense, arcade, casual, mobile, highscore
+**Tags:** puzzle, casual, mobile, hypercasual, highscore
 
 **Description:**
-Enemies march along a winding path toward your outpost — tap empty cells beside the route to build turrets, and tap turrets again to upgrade their damage and range. Waves get bigger, faster, and tougher forever; earn coins from kills and wave-clear bonuses to keep pace. How many waves can you hold the line?
+<2-3 sentences. What you do, the one-more-go hook, the goal.>
 
 ## Where to upload
 - itch.io  (Kind: HTML, check 'mobile friendly', set viewport ~520x720, upload td.zip)

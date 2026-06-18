@@ -80,3 +80,6 @@
 
 .hint { text-align: center; color: var(--muted); font-size: 13px; margin: 0; }
 .hint b { color: var(--text); }
+
+a.brand { text-decoration: none; transition: opacity .1s ease; }
+a.brand:hover { opacity: .8; }

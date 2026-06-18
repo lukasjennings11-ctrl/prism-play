@@ -1,15 +1,15 @@
 # Bubble — portal submission
 
-**Title:** Burst
+**Title:** Bubble
 
-**Tagline:** Aim, pop 3+ matching bubbles, don't let the ceiling reach you.
+**Tagline:** <one punchy line — fill in>
 
-**Controls:** Drag to aim, release to fire (or arrow keys + space on desktop).
+**Controls:** Swipe / arrow keys (mobile + desktop).
 
-**Tags:** arcade, puzzle, casual, mobile, highscore, bubble-shooter
+**Tags:** puzzle, casual, mobile, hypercasual, highscore
 
 **Description:**
-Classic bubble-shooter action: aim and fire colored bubbles into a hanging cluster, pop groups of 3 or more matching colors, and watch disconnected clusters drop for a bonus. Every few shots a new row drops in from the top, pushing the stack closer to your shooter — clear fast or get overrun.
+<2-3 sentences. What you do, the one-more-go hook, the goal.>
 
 ## Where to upload
 - itch.io  (Kind: HTML, check 'mobile friendly', set viewport ~520x720, upload bubble.zip)

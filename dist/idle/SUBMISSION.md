@@ -1,15 +1,15 @@
 # Idle — portal submission
 
-**Title:** Coin Forge
+**Title:** Idle
 
-**Tagline:** Click to mine, hire helpers, watch your fortune snowball.
+**Tagline:** <one punchy line — fill in>
 
-**Controls:** Tap the ore to mine; tap upgrades to buy. Works with mouse or touch.
+**Controls:** Swipe / arrow keys (mobile + desktop).
 
-**Tags:** idle, incremental, clicker, casual, mobile, highscore
+**Tags:** puzzle, casual, mobile, hypercasual, highscore
 
 **Description:**
-Tap the ore to earn coins, then spend them on helpers — drills, carts, smelteries, even an orbital mining rig — that keep earning for you even when you're not playing. Costs scale up, payouts scale up, and your fortune snowballs the longer you stick with it. Close the tab and come back later to collect what your helpers mined while you were away.
+<2-3 sentences. What you do, the one-more-go hook, the goal.>
 
 ## Where to upload
 - itch.io  (Kind: HTML, check 'mobile friendly', set viewport ~520x720, upload idle.zip)

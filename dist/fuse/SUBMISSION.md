@@ -2,14 +2,14 @@
 
 **Title:** Fuse
 
-**Tagline:** Swipe to fuse matching tiles and chase 2048.
+**Tagline:** <one punchy line — fill in>
 
-**Controls:** Swipe or arrow keys (mobile + desktop).
+**Controls:** Swipe / arrow keys (mobile + desktop).
 
-**Tags:** puzzle, casual, mobile, highscore, 2048, merge
+**Tags:** puzzle, casual, mobile, hypercasual, highscore
 
 **Description:**
-Slide tiles to merge matching numbers into bigger ones — classic 2048 gameplay with a polished, juicy feel. Chain combos, chase a new best score, and keep your daily streak alive. Simple to learn, hard to put down.
+<2-3 sentences. What you do, the one-more-go hook, the goal.>
 
 ## Where to upload
 - itch.io  (Kind: HTML, check 'mobile friendly', set viewport ~520x720, upload fuse.zip)

@@ -4,19 +4,21 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#061018" />
-  <title>Splat — grow or get eaten</title>
+  <meta name="description" content="Eat what's smaller. Dodge what's bigger. Grow until you own the arena." />
+  <meta property="og:title" content="Splat — Prism Play" />
+  <meta property="og:description" content="Grow by eating, dodge the bigger blobs, top the arena." />
+  <title>Splat — io arena · Prism Play</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div id="app">
     <header class="hud">
-      <div class="brand">SPLAT</div>
+      <a class="brand" href="../../" aria-label="Back to Prism Play">SPLAT</a>
       <div class="scores">
         <div class="score-box"><span class="label">MASS</span><span id="score">10</span></div>
         <div class="score-box"><span class="label">BEST</span><span id="best">0</span></div>
       </div>
     </header>
-
     <div class="subbar">
       <div class="streak" id="streak">🔥 0&nbsp;day streak</div>
       <div class="rank-box">Rank <span id="rank">1</span>/<span id="rankTotal">13</span></div>
@@ -25,7 +27,6 @@
         <button id="new"  class="text-btn">New</button>
       </div>
     </div>
-
     <div class="board-wrap">
       <canvas id="game" aria-label="Splat game arena"></canvas>
       <div id="overlay" class="overlay hidden" role="dialog" aria-modal="true">
@@ -40,10 +41,8 @@
         </div>
       </div>
     </div>
-
-    <p class="hint">Drag to move · eat smaller blobs · avoid bigger ones</p>
+    <p class="hint">Drag anywhere to steer your blob · eat smaller ones · dodge the bigger ones</p>
   </div>
-
   <script src="shared/juice.js?v=1"></script>
   <script src="shared/retention.js?v=1"></script>
   <script src="game.js?v=1"></script>

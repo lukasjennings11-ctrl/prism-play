@@ -1,7 +1,7 @@
 {
   "slug": "stack",
   "title": "Stack",
-  "genre": "timing",
+  "genre": "stack",
   "tagline": "Tap to drop. Build your tower to the top.",
   "controls": "Tap / Space to drop block",
   "tags": ["arcade", "casual", "timing", "mobile", "highscore", "tower"],

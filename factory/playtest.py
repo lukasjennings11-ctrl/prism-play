@@ -54,6 +54,9 @@ def main():
             if ref.startswith(("http://", "https://", "data:", "#")):
                 continue
             clean = ref.split("?", 1)[0].split("#", 1)[0]
+            # skip navigation hrefs (directory links, no file extension)
+            if clean.endswith("/") or "." not in os.path.basename(clean):
+                continue
             target = os.path.normpath(os.path.join(gdir, clean))
             check(os.path.isfile(target), "asset resolves: %s" % ref)
 
