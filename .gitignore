@@ -22,3 +22,20 @@ node_modules/
 factory/__pycache__/
 *.pyc
 .venv/
+
+# native build artifacts (Capacitor android/ios)
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+android/app/release/
+android/captures/
+apps/*/ios/App/Pods/
+apps/*/ios/App/build/
+apps/*/ios/DerivedData/
+apps/*/android/app/build/
+apps/*/android/.gradle/
+apps/*/android/build/
+
+# generated frame temp dirs
+covers/portal/videos/_frames_*/

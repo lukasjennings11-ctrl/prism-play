@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#080d1e" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="/icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Prism Play" />
+  <title>Prism Play — Ten Browser Games</title>
+  <meta name="description" content="Ten browser games. No installs. No accounts. Pick one and play." />
+  <meta property="og:title" content="Prism Play" />
+  <meta property="og:description" content="Ten browser games. No installs. No accounts. Pick one and play." />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Prism Play" />
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"Prism Play","description":"Ten browser games. No installs, no accounts.","url":"/"}</script>
+  <style>
+    /* ── Tokens ─────────────────────────────────────────────────── */
+    :root {
+      --bg:      #080d1e;
+      --bg2:     #0f1630;
+      --panel:   #141d3a;
+      --panel2:  #1c2850;
+      --text:    #eef2ff;
+      --muted:   #7a85b0;
+      --accent:  #5b8cff;
+      --accent2: #7af0d0;
+      --border:  rgba(255,255,255,.07);
+      --shadow-sm:  0 2px 8px rgba(0,0,0,.45);
+      --shadow-md:  0 8px 32px rgba(0,0,0,.60);
+      --shadow-lg:  0 20px 60px rgba(0,0,0,.70);
+      --radius-sm:  10px;
+      --radius-md:  16px;
+      --radius-lg:  20px;
+      --ease-out-quart: cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    /* ── Reset ───────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; text-decoration: none; }
+
+    /* ── Page shell ──────────────────────────────────────────────── */
+    .page {
+      min-height: 100vh;
+      background:
+        radial-gradient(ellipse 80% 50% at 50% -10%, rgba(91,140,255,.18) 0%, transparent 60%),
+        linear-gradient(180deg, var(--bg2) 0%, var(--bg) 40%);
+    }
+
+    .wrap {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 60px 24px 100px;
+    }
+
+    /* ── Hero ────────────────────────────────────────────────────── */
+    .hero {
+      margin-bottom: 56px;
+      animation: heroFade 600ms var(--ease-out-quart) both;
+    }
+
+    .logo {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+    .logo-prism {
+      width: 28px;
+      height: 28px;
+      flex-shrink: 0;
+    }
+    .logo-wordmark {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      color: var(--accent);
+      opacity: .8;
+    }
+
+    h1 {
+      margin: 0 0 16px;
+      font-size: clamp(48px, 11vw, 88px);
+      font-weight: 900;
+      letter-spacing: -0.03em;
+      line-height: 1;
+      text-wrap: balance;
+      color: var(--text);
+    }
+    h1 em {
+      font-style: normal;
+      color: var(--accent);
+    }
+
+    .hero-sub {
+      margin: 0 0 32px;
+      font-size: clamp(16px, 2.5vw, 19px);
+      color: var(--muted);
+      line-height: 1.5;
+      max-width: 44ch;
+    }
+
+    .hero-pills {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.05);
+      border: 1px solid rgba(255,255,255,.10);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      letter-spacing: .02em;
+    }
+    .pill-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* ── Filter strip ────────────────────────────────────────────── */
+    .filter-strip {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 24px;
+      animation: heroFade 600ms var(--ease-out-quart) 80ms both;
+    }
+    .chip {
+      padding: 8px 18px;
+      border-radius: 999px;
+      border: 1.5px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .chip:hover {
+      color: var(--text);
+      border-color: rgba(255,255,255,.20);
+    }
+    .chip.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #07101f;
+    }
+    .chip:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    /* ── Game count label ────────────────────────────────────────── */
+    .section-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .10em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 16px;
+      opacity: .7;
+    }
+
+    /* ── Grid ────────────────────────────────────────────────────── */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(272px, 1fr));
+      gap: 16px;
+    }
+
+    /* ── Card ────────────────────────────────────────────────────── */
+    a.card {
+      display: flex;
+      flex-direction: column;
+      background: var(--panel);
+      border-radius: var(--radius-lg);
+      padding: 22px 20px 18px;
+      border: 1px solid rgba(255,255,255,.06);
+      box-shadow: var(--shadow-md);
+      position: relative;
+      overflow: hidden;
+      transition:
+        transform 160ms var(--ease-out-quart),
+        box-shadow 160ms var(--ease-out-quart),
+        border-color 160ms ease;
+      animation: cardReveal 480ms var(--ease-out-quart) both;
+      animation-delay: calc(var(--i, 0) * 45ms + 100ms);
+    }
+    a.card:hover {
+      transform: translateY(-5px);
+      box-shadow: var(--shadow-lg), 0 0 0 1px var(--gc, var(--accent));
+      border-color: color-mix(in srgb, var(--gc, var(--accent)) 40%, transparent);
+    }
+    a.card:focus-visible {
+      outline: 2px solid var(--gc, var(--accent));
+      outline-offset: 3px;
+    }
+    a.card.hidden { display: none; }
+
+    /* 4px top accent band */
+    a.card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 4px;
+      background: var(--gc, var(--accent));
+      opacity: .85;
+    }
+
+    /* ── DAILY badge ─────────────────────────────────────────────── */
+    .badge-daily {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      background: var(--gc, var(--accent));
+      color: #07101f;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    /* ── Card content ────────────────────────────────────────────── */
+    .card-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--gc, var(--accent)) 16%, transparent);
+      border: 1px solid color-mix(in srgb, var(--gc, var(--accent)) 20%, transparent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      margin-bottom: 16px;
+      flex-shrink: 0;
+    }
+
+    .card-genre {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .10em;
+      text-transform: uppercase;
+      color: var(--gc, var(--accent));
+      margin-bottom: 7px;
+    }
+
+    .card-title {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -.02em;
+      color: var(--text);
+      margin-bottom: 8px;
+      line-height: 1;
+    }
+
+    .card-tag {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.5;
+      flex: 1;
+      margin-bottom: 20px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .card-play {
+      display: block;
+      width: 100%;
+      text-align: center;
+      padding: 10px 0;
+      border-radius: var(--radius-sm);
+      background: color-mix(in srgb, var(--gc, var(--accent)) 16%, transparent);
+      border: 1.5px solid color-mix(in srgb, var(--gc, var(--accent)) 40%, transparent);
+      color: var(--gc, var(--accent));
+      font: inherit;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: .04em;
+      transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+    }
+    a.card:hover .card-play {
+      background: var(--gc, var(--accent));
+      border-color: var(--gc, var(--accent));
+      color: #07101f;
+    }
+
+    /* ── Empty state ─────────────────────────────────────────────── */
+    .empty {
+      display: none;
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 48px 0;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    /* ── Footer ──────────────────────────────────────────────────── */
+    footer {
+      margin-top: 80px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding-top: 28px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .footer-brand {
+      font-weight: 700;
+      letter-spacing: .05em;
+      color: var(--muted);
+    }
+    .footer-links {
+      display: flex;
+      gap: 20px;
+    }
+    .footer-links a {
+      color: var(--muted);
+      transition: color 100ms ease;
+    }
+    .footer-links a:hover { color: var(--text); }
+
+    /* ── Chevron scroll hint ─────────────────────────────────────── */
+    .scroll-hint {
+      display: flex;
+      justify-content: flex-start;
+      margin-top: 40px;
+      margin-bottom: -16px;
+    }
+    .chevron {
+      width: 20px;
+      height: 20px;
+      color: var(--muted);
+      opacity: .4;
+      animation: chevronBounce 2s ease-in-out infinite;
+    }
+    @keyframes chevronBounce {
+      0%, 100% { transform: translateY(0); }
+      50%       { transform: translateY(5px); }
+    }
+
+    /* ── Animations ──────────────────────────────────────────────── */
+    @keyframes cardReveal {
+      from { opacity: 0; transform: translateY(18px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes heroFade {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .hero, .filter-strip, a.card, .chevron {
+        animation: none !important;
+      }
+    }
+
+    /* ── Responsive ──────────────────────────────────────────────── */
+    @media (max-width: 520px) {
+      .wrap { padding: 40px 16px 72px; }
+      .grid { gap: 12px; }
+      h1 { letter-spacing: -0.02em; }
+      footer { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+  <div class="wrap">
+
+    <!-- Hero -->
+    <header class="hero">
+      <div class="logo" aria-hidden="true">
+        <svg class="logo-prism" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <polygon points="14,2 26,26 2,26" fill="none" stroke="#5b8cff" stroke-width="1.8" stroke-linejoin="round"/>
+          <line x1="14" y1="2" x2="14" y2="26" stroke="#7af0d0" stroke-width="1.4" stroke-opacity=".7"/>
+          <polygon points="14,2 26,26 14,26" fill="#5b8cff" fill-opacity=".14"/>
+          <polygon points="14,2 14,26 2,26" fill="#7af0d0" fill-opacity=".09"/>
+        </svg>
+        <span class="logo-wordmark">Prism Play</span>
+      </div>
+
+      <h1>Ten games.<br><em>One tab.</em></h1>
+
+      <p class="hero-sub">Browser-native arcade. No installs, no accounts — pick a game and go. A new puzzle resets every day.</p>
+
+      <div class="hero-pills" aria-label="Quick facts">
+        <span class="pill"><span class="pill-dot" style="background:#5b8cff"></span>10 games live</span>
+        <span class="pill"><span class="pill-dot" style="background:#ffb347"></span>Daily puzzle</span>
+        <span class="pill"><span class="pill-dot" style="background:#7af0d0"></span>Works on any device</span>
+      </div>
+
+      <div class="scroll-hint" aria-hidden="true">
+        <svg class="chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="4 8 10 14 16 8"/>
+        </svg>
+      </div>
+    </header>
+
+    <!-- Filter -->
+    <div class="filter-strip" role="radiogroup" aria-label="Filter by genre">
+      <button class="chip active" role="radio" aria-checked="true"  data-filter="all">All</button>
+      <button class="chip"        role="radio" aria-checked="false" data-filter="puzzle">Puzzle</button>
+      <button class="chip"        role="radio" aria-checked="false" data-filter="arcade">Arcade</button>
+      <button class="chip"        role="radio" aria-checked="false" data-filter="strategy">Strategy</button>
+      <button class="chip"        role="radio" aria-checked="false" data-filter="daily">Daily</button>
+    </div>
+
+    <!-- Count label -->
+    <p class="section-label" id="count-label">10 games</p>
+
+    <!-- Grid -->
+    <div class="grid" id="grid">
+
+      <a class="card" href="games/fuse/"
+         data-genre="puzzle"
+         style="--gc:#5b8cff; --i:0;">
+        <div class="card-icon">🧩</div>
+        <span class="card-genre">Puzzle</span>
+        <div class="card-title">Fuse</div>
+        <div class="card-tag">Swipe tiles into each other. When two match, they fuse. Chase 2048.</div>
+        <span class="card-play">Play →</span>
+      </a>
+
+      <a class="card" href="games/stack/"
+         data-genre="arcade"
+         style="--gc:#7c6af7; --i:1;">
+        <div class="card-icon">🏗️</div>
+        <span class="card-genre">Arcade</span>
+        <div class="card-title">Stack</div>
+        <div class="card-tag">A block slides back and forth. Tap to drop it. Each floor narrows your margin.</div>
+        <span class="card-play">Play →</span>
+      </a>
+
+      <a class="card" href="games/orbit/"
+         data-genre="puzzle"
+         style="--gc:#7af0d0; --i:2;">
+        <div class="card-icon">🌌</div>
+        <span class="card-genre">Puzzle</span>
+        <div class="card-title">Orbit</div>
+        <div class="card-tag">Drop cosmic orbs into the jar. Same tier, same touch — they merge into the next.</div>
+        <span class="card-play">Play →</span>
+      </a>
+
+      <a class="card" href="games/match3/"
+         data-genre="puzzle"
+         style="--gc:#a06af7; --i:3;">
+        <div class="card-icon">💎</div>
+        <span class="card-genre">Puzzle</span>
+        <div class="card-title">Gem Drop</div>
+        <div class="card-tag">Swap adjacent gems to line up three or more. Chains score bigger. No timer, pure logic.</div>
+        <span class="card-play">Play →</span>
+      </a>
+
+      <a class="card" href="games/bubble/"
+         data-genre="arcade"
+         style="--gc:#ff8ed4; --i:4;">
+        <div class="card-icon">🫧</div>
+        <span class="card-genre">Arcade</span>
+        <div class="card-title">Burst</div>
+        <div class="card-tag">Aim at the ceiling. Fire to pop groups of three. The stack drops a row every six shots.</div>
+        <span class="card-play">Play →</span>
+      </a>
+
+      <a class="card" href="games/idle/"
+         data-genre="arcade"
+         style="--gc:#ffb347; --i:5;">
+        <div class="card-icon">⛏️</div>
+        <span class="card-genre">Arcade</span>
+        <div class="card-title">Coin Forge</div>
+        <div class="card-tag">Tap once, then never stop. Hire helpers. Watch the numbers run away from you.</div>
+        <span class="card-play">Play →</span>
+      </a>
+
+      <a class="card" href="games/io/"
+         data-genre="arcade"
+         style="--gc:#3ee6b8; --i:6;">
+        <div class="card-icon">🟢</div>
+        <span class="card-genre">Arcade</span>
+        <div class="card-title">Splat</div>
+        <div class="card-tag">Eat what's smaller. Dodge what's bigger. Grow until you own the arena.</div>
+        <span class="card-play">Play →</span>
+      </a>
+
+      <a class="card" href="games/runner/"
+         data-genre="arcade"
+         style="--gc:#4fd6ff; --i:7;">
+        <div class="card-icon">🏎️</div>
+        <span class="card-genre">Arcade</span>
+        <div class="card-title">Dash Lanes</div>
+        <div class="card-tag">Three lanes, one survivor. Tap left or right. The traffic doesn't slow down.</div>
+        <span class="card-play">Play →</span>
+      </a>
+
+      <a class="card" href="games/equate/"
+         data-genre="daily puzzle"
+         style="--gc:#4fe0c8; --i:8;">
+        <div class="badge-daily" aria-label="Daily game">Daily</div>
+        <div class="card-icon">🔢</div>
+        <span class="card-genre">Daily Puzzle</span>
+        <div class="card-title">Equate</div>
+        <div class="card-tag">One equation hidden each day. Six guesses. Everyone gets the same board.</div>
+        <span class="card-play">Play →</span>
+      </a>
+
+      <a class="card" href="games/td/"
+         data-genre="strategy"
+         style="--gc:#5ef79b; --i:9;">
+        <div class="card-icon">🛡️</div>
+        <span class="card-genre">Strategy</span>
+        <div class="card-title">Outpost</div>
+        <div class="card-tag">Place turrets. Upgrade them. The waves don't stop — but neither do you.</div>
+        <span class="card-play">Play →</span>
+      </a>
+
+      <p class="empty" id="empty-state">No games match that filter.</p>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+      <span class="footer-brand">Prism Play &copy; <span id="year"></span></span>
+      <nav class="footer-links" aria-label="Footer navigation">
+        <a href="/">All Games</a>
+        <a href="games/equate/">Today's Puzzle</a>
+      </nav>
+    </footer>
+
+  </div>
+</div>
+
+<script>
+  document.getElementById('year').textContent = new Date().getFullYear();
+
+  var chips   = document.querySelectorAll('.chip');
+  var cards   = document.querySelectorAll('a.card');
+  var label   = document.getElementById('count-label');
+  var empty   = document.getElementById('empty-state');
+
+  chips.forEach(function(chip) {
+    chip.addEventListener('click', function() {
+      var filter = this.dataset.filter;
+      chips.forEach(function(c) {
+        c.classList.remove('active');
+        c.setAttribute('aria-checked', 'false');
+      });
+      this.classList.add('active');
+      this.setAttribute('aria-checked', 'true');
+
+      var visible = 0;
+      cards.forEach(function(card) {
+        var genre = card.dataset.genre || '';
+        var show = filter === 'all' || genre.indexOf(filter) !== -1;
+        card.classList.toggle('hidden', !show);
+        if (show) visible++;
+      });
+
+      label.textContent = visible === 10 ? '10 games' : visible + (visible === 1 ? ' game' : ' games');
+      empty.style.display = visible === 0 ? 'block' : 'none';
+    });
+  });
+</script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'));
+  }
+</script>
+</body>
+</html>

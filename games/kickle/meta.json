@@ -1,0 +1,9 @@
+{
+  "slug": "kickle",
+  "title": "Kickle",
+  "tagline": "Guess the footballer in 6 tries. New name every day.",
+  "genre": "Daily Puzzle",
+  "emoji": "⚽",
+  "accent": "#3df57a",
+  "bg": "#051a0a"
+}
