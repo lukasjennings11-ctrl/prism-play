@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0d0b1a" />
+  <meta name="description" content="Swap gems to line up three or more. Chains score bigger. No timer, pure logic." />
+  <meta property="og:title" content="Gem Drop — Prism Play" />
+  <meta property="og:description" content="Swap gems, chain combos, chase your best score." />
+  <title>Gem Drop — match-3 puzzle · Prism Play</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="hud">
+      <a class="brand" href="../../" aria-label="Back to Prism Play">GEM DROP</a>
+      <div class="scores">
+        <div class="score-box"><span class="label">SCORE</span><span id="score">0</span></div>
+        <div class="score-box"><span class="label">BEST</span><span id="best">0</span></div>
+      </div>
+    </header>
+    <div class="subbar">
+      <div class="streak" id="streak">🔥 0&nbsp;day streak</div>
+      <div class="combo-box hidden" id="combo">x1 combo</div>
+      <div class="controls">
+        <button id="mute" class="icon-btn" aria-label="Toggle sound">🔊</button>
+        <button id="new"  class="text-btn">New</button>
+      </div>
+    </div>
+    <div class="board-wrap">
+      <canvas id="game" aria-label="Gem Drop game board"></canvas>
+      <div id="overlay" class="overlay hidden" role="dialog" aria-modal="true">
+        <div class="panel">
+          <h1 id="ov-title">No Moves!</h1>
+          <p  id="ov-sub">The board ran out of matches.</p>
+          <div class="ov-scores">
+            <div><span class="label">Score</span><b id="ov-score">0</b></div>
+            <div><span class="label">Best</span><b id="ov-best">0</b></div>
+          </div>
+          <button id="ov-again" class="cta">Play again</button>
+          <button id="ov-share" class="cta secondary" style="display:none">Share score</button>
+          <p style="margin-top:10px;font-size:.85rem"><a href="/" style="color:var(--accent);text-decoration:none">&larr; All 10 Prism Play games</a></p>
+        </div>
+      </div>
+    </div>
+    <p class="hint">Tap a gem · tap a neighbour to <b>swap</b> · cascades score bigger</p>
+  </div>
+  <script src="../../shared/juice.js?v=1"></script>
+  <script src="../../shared/retention.js?v=1"></script>
+  <script src="game.js?v=1"></script>
+  <script>
+  (function(){
+    var btn = document.getElementById('ov-share');
+    var overlay = document.getElementById('overlay');
+    if (!btn || !overlay) return;
+    new MutationObserver(function(){
+      if (!overlay.classList.contains('hidden')) btn.style.display = '';
+      else { btn.style.display = 'none'; btn.textContent = 'Share score'; }
+    }).observe(overlay, {attributes:true, attributeFilter:['class']});
+    btn.addEventListener('click', function(){
+      var sc = (document.getElementById('ov-score')||{}).textContent || '?';
+      var text = 'Gem Drop — ' + sc + ' pts on Prism Play!';
+      if (navigator.share) { navigator.share({title:'Gem Drop',text:text,url:'https://ljennings11.itch.io/gem-drop'}); }
+      else if (navigator.clipboard) { navigator.clipboard.writeText(text+' https://ljennings11.itch.io/gem-drop').then(function(){ btn.textContent='Copied ✓'; setTimeout(function(){ btn.textContent='Share score'; },2000); }); }
+    });
+  })();
+  </script>
+</body>
+</html>

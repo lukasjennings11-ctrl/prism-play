@@ -1,0 +1,19 @@
+{
+  "appId": "com.prismplay.equate",
+  "appName": "Equate",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1200,
+      "backgroundColor": "#080d1e",
+      "androidSplashResourceName": "splash",
+      "showSpinner": false,
+      "launchAutoHide": true
+    },
+    "StatusBar": {
+      "style": "Dark",
+      "backgroundColor": "#080d1e"
+    }
+  }
+}

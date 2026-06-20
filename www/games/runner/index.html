@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#07101a" />
+  <meta name="description" content="Three lanes, one survivor. Tap left or right. The traffic doesn't slow down." />
+  <meta property="og:title" content="Dash Lanes — Prism Play" />
+  <meta property="og:description" content="Tap to switch lanes, dodge the traffic, outrun your best." />
+  <title>Dash Lanes — endless runner · Prism Play</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="hud">
+      <a class="brand" href="../../" aria-label="Back to Prism Play">DASH LANES</a>
+      <div class="scores">
+        <div class="score-box"><span class="label">SCORE</span><span id="score">0</span></div>
+        <div class="score-box"><span class="label">BEST</span><span id="best">0</span></div>
+      </div>
+    </header>
+    <div class="subbar">
+      <div class="streak" id="streak">🔥 0&nbsp;day streak</div>
+      <div class="speed-box">Speed ×<span id="speedmult">1.0</span></div>
+      <div class="controls">
+        <button id="mute" class="icon-btn" aria-label="Toggle sound">🔊</button>
+        <button id="new"  class="text-btn">New</button>
+      </div>
+    </div>
+    <div class="board-wrap">
+      <canvas id="game" aria-label="Dash Lanes game board"></canvas>
+      <div id="overlay" class="overlay hidden" role="dialog" aria-modal="true">
+        <div class="panel">
+          <h1 id="ov-title">Crashed!</h1>
+          <p  id="ov-sub">You hit an obstacle.</p>
+          <div class="ov-scores">
+            <div><span class="label">Score</span><b id="ov-score">0</b></div>
+            <div><span class="label">Best</span><b id="ov-best">0</b></div>
+          </div>
+          <button id="ov-again" class="cta">Run again</button>
+          <button id="ov-share" class="cta secondary" style="display:none">Share score</button>
+          <p style="margin-top:10px;font-size:.85rem"><a href="/" style="color:var(--accent);text-decoration:none">&larr; All 10 Prism Play games</a></p>
+        </div>
+      </div>
+    </div>
+    <p class="hint">Tap left/right side · <b>arrow keys</b> to switch lanes · near-miss scores a bonus</p>
+  </div>
+  <script src="../../shared/juice.js?v=1"></script>
+  <script src="../../shared/retention.js?v=1"></script>
+  <script src="game.js?v=1"></script>
+  <script>
+  (function(){
+    var btn = document.getElementById('ov-share');
+    var overlay = document.getElementById('overlay');
+    if (!btn || !overlay) return;
+    new MutationObserver(function(){
+      if (!overlay.classList.contains('hidden')) btn.style.display = '';
+      else { btn.style.display = 'none'; btn.textContent = 'Share score'; }
+    }).observe(overlay, {attributes:true, attributeFilter:['class']});
+    btn.addEventListener('click', function(){
+      var sc = (document.getElementById('ov-score')||{}).textContent || '?';
+      var text = 'Dash Lanes — ' + sc + ' pts on Prism Play!';
+      if (navigator.share) { navigator.share({title:'Dash Lanes',text:text,url:'https://ljennings11.itch.io/dash-lanes'}); }
+      else if (navigator.clipboard) { navigator.clipboard.writeText(text+' https://ljennings11.itch.io/dash-lanes').then(function(){ btn.textContent='Copied ✓'; setTimeout(function(){ btn.textContent='Share score'; },2000); }); }
+    });
+  })();
+  </script>
+</body>
+</html>
