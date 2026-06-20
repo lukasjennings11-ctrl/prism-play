@@ -36,9 +36,10 @@ async function drive(page, slug, deadline) {
           await page.keyboard.press(Math.random() < 0.5 ? 'ArrowLeft' : 'ArrowRight'); await sleep(380); break;
         case 'stack':
           await page.keyboard.press('Space'); await sleep(650); break;
-        case 'equate':
-          for (const c of ['1','2','+','3','4','=','4','6']) { await page.keyboard.press(c).catch(()=>{}); await sleep(120);}
-          await page.keyboard.press('Enter').catch(()=>{}); await sleep(900); break;
+        case 'equate': {
+          const rows = [['1','2','+','4','=','1','6'], ['9','-','3','=','6','+','0'], ['8','/','2','=','4','+','0']];
+          for (const row of rows) { for (const c of row) { await page.keyboard.press(c).catch(()=>{}); await sleep(160);} await page.keyboard.press('Enter').catch(()=>{}); await sleep(700);} break;
+        }
         case 'idle':
           await page.mouse.click(cx, cy); await sleep(110); break;
         case 'orbit':
@@ -51,9 +52,18 @@ async function drive(page, slug, deadline) {
           await page.mouse.click(rnd(vp.width*0.2, vp.width*0.8), rnd(vp.height*0.3, vp.height*0.7)); await sleep(550); break;
         case 'match3':
           await page.mouse.click(rnd(vp.width*0.2, vp.width*0.8), rnd(vp.height*0.3, vp.height*0.7)); await sleep(450); break;
-        case 'kickle':
-          for (const c of 'messi') { await page.keyboard.press(c).catch(()=>{}); await sleep(160);}
-          await sleep(1500); break;
+        case 'kickle': {
+          // focus the search field, type a name to trigger the autocomplete dropdown, pick it
+          await page.evaluate(() => { const i = document.querySelector('input'); if (i) i.focus(); }).catch(()=>{});
+          for (const name of ['messi', 'haaland', 'kane']) {
+            await page.evaluate(() => { const i = document.querySelector('input'); if (i) i.value = ''; }).catch(()=>{});
+            for (const c of name) { await page.keyboard.type(c).catch(()=>{}); await sleep(180); }
+            await sleep(900);
+            await page.keyboard.press('Enter').catch(()=>{});
+            await sleep(1200);
+          }
+          break;
+        }
         default:
           await page.keyboard.press(keys[(Math.random()*4)|0]); await sleep(400);
       }
@@ -75,21 +85,29 @@ async function capture(browser, slug, o) {
   rmSync(frameDir, { recursive: true, force: true });
   mkdirSync(frameDir, { recursive: true });
 
-  const client = await page.target().createCDPSession();
-  let n = 0;
+  // Fixed-interval screenshots: guarantees enough frames even for static games
+  // (CDP screencast only emits on visual change, which starves text-input games).
+  const FPS = 15;
+  const interval = 1000 / FPS;
   const t0 = Date.now();
-  client.on('Page.screencastFrame', async ({ data, sessionId }) => {
-    writeFileSync(join(frameDir, `f${String(n++).padStart(4,'0')}.jpg`), Buffer.from(data, 'base64'));
-    try { await client.send('Page.screencastFrameAck', { sessionId }); } catch {}
-  });
-  await client.send('Page.startScreencast', { format: 'jpeg', quality: 80, everyNthFrame: 1 });
+  const deadline = t0 + CAPTURE_MS;
+  let n = 0, stop = false;
 
-  await drive(page, slug, t0 + CAPTURE_MS);
+  // drive input concurrently with capture
+  const driving = drive(page, slug, deadline).catch(() => {});
 
-  await client.send('Page.stopScreencast').catch(()=>{});
-  const secs = (Date.now() - t0) / 1000;
-  const fps = Math.max(8, Math.min(30, Math.round(n / secs)));
-  await page.close();
+  while (Date.now() < deadline && !stop) {
+    const tick = Date.now();
+    try {
+      const buf = await page.screenshot({ type: 'jpeg', quality: 80 });
+      writeFileSync(join(frameDir, `f${String(n++).padStart(4,'0')}.jpg`), buf);
+    } catch { stop = true; break; }
+    const wait = interval - (Date.now() - tick);
+    if (wait > 0) await new Promise(r => setTimeout(r, wait));
+  }
+  await driving;
+  const fps = FPS;
+  await page.close().catch(()=>{});
 
   if (n < 5) { console.log(`  ⚠ ${slug}/${o.name}: only ${n} frames`); rmSync(frameDir, {recursive:true,force:true}); return; }
 
