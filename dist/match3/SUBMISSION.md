@@ -2,15 +2,15 @@
 
 **Title:** Gem Drop
 
-**Tagline / short description:** Swap gems, chain combos, chase your best score.
+**Tagline / short description:** Tilt the board to slide every gem at once — line up 3+ and cascade.
 
-**Instructions (how to play):** Tap a gem then tap a neighbour to swap
+**Instructions (how to play):** Swipe or arrow keys to tilt
 
-**Controls:** Tap a gem then tap a neighbour to swap
+**Controls:** Swipe or arrow keys to tilt
 
 **Orientation:** responsive — portrait + landscape, plays at 375px width and on desktop.
 
-**Tags:** puzzle, casual, match3, mobile, highscore, gems
+**Tags:** puzzle, match3, gravity, levels, casual, mobile
 
 **Description:**
 <2-3 sentences. What you do, the one-more-go hook, the goal.>

@@ -1,557 +1,419 @@
-/* Gem Drop — match-3 swap puzzle. Vanilla JS, mobile-first.
- * Tap a gem, then tap an adjacent gem to swap. If the swap creates a
- * 3+ match it clears, gems fall, new ones fill from the top — cascade
- * until stable. No valid moves left = game over (no artificial timer).
- * Uses ../../shared/juice.js and ../../shared/retention.js.
+/* Gem Drop — gravity-tilt match puzzle. Dependency-free, mobile-first.
+ *
+ * NOT a swap match-3. You TILT the whole board (swipe / arrow keys) and EVERY
+ * gem slides that direction at once; lines of 3+ clear, gems cascade, and new
+ * gems pour in from the trailing edge. Plan tilts to set up chain reactions.
+ * Objective levels (clear N gems / hit a score within a tilt budget) form a
+ * campaign; endless after. Color-blind glyphs on every gem.
+ *
+ * Shared: juice.js, retention.js, portal.js, progression.js, stage.js.
  */
 (function () {
   'use strict';
 
   var GAME = 'match3';
-  var clamp = Juice.clamp, lerp = Juice.lerp;
+  var clamp = Juice.clamp;
 
-  var COLS = 7, ROWS = 9;
-  // 6 gem colors: [fill-top, fill-bottom, glow]
+  var COLS = 7, ROWS = 8;
+  // [top, bottom, glow] per color + a color-blind glyph
   var GEMS = [
-    ['#ff6b8a', '#d63060', '#ff6b8a'],  // red
-    ['#ffb347', '#e07b00', '#ffb347'],  // orange
-    ['#ffe066', '#c9a800', '#ffe066'],  // yellow
-    ['#6bf77a', '#2cba3d', '#6bf77a'],  // green
-    ['#6ab4ff', '#2470d6', '#6ab4ff'],  // blue
-    ['#c46af7', '#8230c9', '#c46af7'],  // purple
+    ['#ff6b8a', '#d63060', '#ff6b8a'], ['#ffb347', '#e07b00', '#ffb347'],
+    ['#ffe066', '#c9a800', '#ffe066'], ['#6bf77a', '#2cba3d', '#6bf77a'],
+    ['#6ab4ff', '#2470d6', '#6ab4ff'], ['#c46af7', '#8230c9', '#c46af7']
   ];
-  var NCOLORS = GEMS.length;
+  var GLYPH = ['●', '▲', '◆', '★', '■', '⬢'];
 
-  // points per match length (index = length, capped at 7+)
-  var PTS = [0, 0, 0, 10, 25, 50, 100, 150];
+  var LEVELS = [
+    { name: 'Clear 20 gems',    goal: 'clear', target: 20,   tilts: 10 },
+    { name: 'Earn 500 points',  goal: 'score', target: 500,  tilts: 12 },
+    { name: 'Clear 40 gems',    goal: 'clear', target: 40,   tilts: 16 },
+    { name: 'Earn 1500 points', goal: 'score', target: 1500, tilts: 20 },
+    { name: 'Clear 60 gems',    goal: 'clear', target: 60,   tilts: 26 }
+  ];
+  var MISSIONS = [
+    { id: 'm_clear',  text: 'Clear 150 gems',       target: 150,  reward: 30 },
+    { id: 'm_combo',  text: 'Get a 4-chain cascade', target: 1,    reward: 40 },
+    { id: 'm_levels', text: 'Beat 2 levels',         target: 2,    reward: 35 },
+    { id: 'm_score',  text: 'Earn 3000 points',      target: 3000, reward: 30 },
+    { id: 'm_big',    text: 'Clear a line of 5+',    target: 1,    reward: 35 }
+  ];
 
   // ---- DOM ----
-  var canvas  = document.getElementById('game');
-  var ctx     = canvas.getContext('2d');
-  var wrap    = document.querySelector('.board-wrap');
-  var scoreEl = document.getElementById('score');
-  var bestEl  = document.getElementById('best');
-  var comboEl = document.getElementById('combo');
-  var streakEl= document.getElementById('streak');
+  var canvas = document.getElementById('game'), ctx = canvas.getContext('2d');
+  var wrap = document.querySelector('.board-wrap');
+  var scoreEl = document.getElementById('score'), bestEl = document.getElementById('best');
+  var goalEl = document.getElementById('goal'), movesEl = document.getElementById('moves');
   var overlay = document.getElementById('overlay');
-  var ovTitle = document.getElementById('ov-title');
-  var ovSub   = document.getElementById('ov-sub');
-  var ovScore = document.getElementById('ov-score');
-  var ovBest  = document.getElementById('ov-best');
-  var ovAgain = document.getElementById('ov-again');
+  var ovTitle = document.getElementById('ov-title'), ovSub = document.getElementById('ov-sub');
+  var ovScore = document.getElementById('ov-score'), ovBest = document.getElementById('ov-best');
+  var ovAgain = document.getElementById('ov-again'), ovContinue = document.getElementById('ov-continue');
+
+  var particles = new Juice.Particles(), popups = new Juice.Popups(), shake = new Juice.Shake();
+  var shakeOff = { x: 0, y: 0 };
 
   // ---- layout ----
-  var CW = 0, CH = 0, DPR = 1;
-  var CELL = 0, OX = 0, OY = 0; // cell size, board origin
-
+  var CELL = 44, OX = 0, OY = 0, DPR = 1, GW = 0, GH = 0;
+  function cx(c) { return OX + c * CELL + CELL / 2; }
+  function cy(r) { return OY + r * CELL + CELL / 2; }
   function layout() {
-    var bw = wrap.clientWidth  || 320;
-    var bh = wrap.clientHeight || 480;
-    // fit a COLS x ROWS grid; add 2px border padding
-    var cellW = Math.floor((bw - 4) / COLS);
-    var cellH = Math.floor((bh - 4) / ROWS);
-    CELL = Math.max(28, Math.min(cellW, cellH, 56));
-    CW = CELL * COLS + 4;
-    CH = CELL * ROWS + 4;
+    var bw = wrap.clientWidth || 320, bh = wrap.clientHeight || 480;
+    CELL = clamp(Math.floor(Math.min((bw - 4) / COLS, (bh - 4) / ROWS)), 30, 60);
+    GW = CELL * COLS; GH = CELL * ROWS;
     DPR = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width  = Math.round(CW * DPR);
-    canvas.height = Math.round(CH * DPR);
-    canvas.style.width  = CW + 'px';
-    canvas.style.height = CH + 'px';
+    canvas.width = Math.round(GW * DPR); canvas.height = Math.round(GH * DPR);
+    canvas.style.width = GW + 'px'; canvas.style.height = GH + 'px';
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-    OX = 2; OY = 2;
+    OX = 0; OY = 0;
   }
 
-  // ---- grid ----
-  // grid[r][c] = color index 0..NCOLORS-1, or -1 (empty/falling)
-  var grid;
-  // per-cell animation state
-  var cellAnim; // cellAnim[r][c] = {scale, alpha, vy, dy} — dy = fractional row offset for fall
+  // ---- state ----
+  // grid[r][c] = tile{color, ox, oy, scale, alpha} | null
+  var grid, score, best, tiltsLeft, over, busy, mode, level, def;
+  var clearedThisLevel, usedContinue;
 
-  function mkGrid() {
-    var g = [], a = [];
-    for (var r = 0; r < ROWS; r++) { g.push([]); a.push([]); for (var c = 0; c < COLS; c++) { g[r].push(0); a[r].push({scale:1,alpha:1,dy:0,vy:0}); } }
-    return { g: g, a: a };
-  }
+  var FILL_FRAC = 0.58, SPAWN_PER_TILT = 4;
 
+  function mkTile(color) { return { color: color, ox: 0, oy: 0, scale: 1, alpha: 1 }; }
   function rand(n) { return (Math.random() * n) | 0; }
+  function countEmpty() { var n = 0; for (var r = 0; r < ROWS; r++) for (var c = 0; c < COLS; c++) if (!grid[r][c]) n++; return n; }
 
-  function initGrid() {
-    grid = []; cellAnim = [];
-    for (var r = 0; r < ROWS; r++) { grid.push([]); cellAnim.push([]); for (var c = 0; c < COLS; c++) { grid[r].push(0); cellAnim[r].push({scale:1,alpha:1,dy:0,vy:0}); } }
-    // fill without initial matches
-    for (var r2 = 0; r2 < ROWS; r2++) {
-      for (var c2 = 0; c2 < COLS; c2++) {
-        var col;
-        do { col = rand(activeColors()); } while (wouldMatch(r2, c2, col));
-        grid[r2][c2] = col;
-      }
+  // board starts PARTIALLY full so tilts have room to rearrange gems
+  function initBoard() {
+    grid = [];
+    for (var r = 0; r < ROWS; r++) { grid.push([]); for (var c = 0; c < COLS; c++) grid[r].push(null); }
+    var cells = [];
+    for (r = 0; r < ROWS; r++) for (var c2 = 0; c2 < COLS; c2++) cells.push([r, c2]);
+    for (var i = cells.length - 1; i > 0; i--) { var j = rand(i + 1); var tmp = cells[i]; cells[i] = cells[j]; cells[j] = tmp; }
+    var fillN = Math.floor(ROWS * COLS * FILL_FRAC);
+    for (i = 0; i < fillN; i++) grid[cells[i][0]][cells[i][1]] = mkTile(rand(GEMS.length));
+    // clear any accidental starting runs (no score)
+    var guard = 0;
+    while (guard++ < 40) { var res = findRuns(); if (!res.any) break; for (r = 0; r < ROWS; r++) for (c2 = 0; c2 < COLS; c2++) if (res.marked[r][c2]) grid[r][c2] = null; }
+  }
+
+  // add a few new gems at random empty cells (they slide into place on the next slide)
+  function spawnGems(K, D) {
+    var empties = [];
+    for (var r = 0; r < ROWS; r++) for (var c = 0; c < COLS; c++) if (!grid[r][c]) empties.push([r, c]);
+    for (var i = empties.length - 1; i > 0; i--) { var j = rand(i + 1); var t = empties[i]; empties[i] = empties[j]; empties[j] = t; }
+    K = Math.min(K, empties.length);
+    for (i = 0; i < K; i++) {
+      var rc = empties[i], g = mkTile(rand(GEMS.length)); g.scale = 0.5; g.alpha = 0;
+      if (D === 'L') g.ox = CELL; else if (D === 'R') g.ox = -CELL; else if (D === 'U') g.oy = CELL; else g.oy = -CELL;
+      grid[rc[0]][rc[1]] = g;
     }
   }
 
-  function activeColors() {
-    if (score < 200) return 4;
-    if (score < 600) return 5;
-    return 6;
-  }
-  function wouldMatch(r, c, col) {
-    // horizontal: two to the left
-    if (c >= 2 && grid[r][c-1] === col && grid[r][c-2] === col) return true;
-    // vertical: two above
-    if (r >= 2 && grid[r-1][c] === col && grid[r-2][c] === col) return true;
-    return false;
-  }
-
-  // ---- match finding ----
-  function findMatches() {
-    // returns array of {r,c} sets as flat objects merged
-    var marked = [];
-    for (var r = 0; r < ROWS; r++) { marked.push([]); for (var c = 0; c < COLS; c++) marked[r].push(false); }
-    var any = false;
-    // horizontal
-    for (var r2 = 0; r2 < ROWS; r2++) {
-      for (var c2 = 0; c2 < COLS - 2; ) {
-        var col = grid[r2][c2], len = 1;
-        while (c2 + len < COLS && grid[r2][c2+len] === col) len++;
-        if (len >= 3) { for (var i = 0; i < len; i++) { marked[r2][c2+i] = true; any = true; } }
-        c2 += len;
-      }
-    }
-    // vertical
-    for (var c3 = 0; c3 < COLS; c3++) {
-      for (var r3 = 0; r3 < ROWS - 2; ) {
-        var col2 = grid[r3][c3], len2 = 1;
-        while (r3 + len2 < ROWS && grid[r3+len2][c3] === col2) len2++;
-        if (len2 >= 3) { for (var j = 0; j < len2; j++) { marked[r3+j][c3] = true; any = true; } }
-        r3 += len2;
-      }
-    }
-    return any ? marked : null;
-  }
-
-  // count how many cells are marked in the flat marked grid
-  function countMarked(marked) {
-    var n = 0; for (var r = 0; r < ROWS; r++) for (var c = 0; c < COLS; c++) if (marked[r][c]) n++;
-    return n;
-  }
-
-  // ---- valid move check ----
-  function hasValidMoves() {
-    for (var r = 0; r < ROWS; r++) {
-      for (var c = 0; c < COLS; c++) {
-        // try swap right
-        if (c + 1 < COLS) { doSwap(r,c,r,c+1); var m = findMatches(); doSwap(r,c,r,c+1); if (m) return true; }
-        // try swap down
-        if (r + 1 < ROWS) { doSwap(r,c,r+1,c); var m2 = findMatches(); doSwap(r,c,r+1,c); if (m2) return true; }
-      }
-    }
-    return false;
-  }
-
-  function doSwap(r1,c1,r2,c2) { var t = grid[r1][c1]; grid[r1][c1] = grid[r2][c2]; grid[r2][c2] = t; }
-
-  // ---- state machine ----
-  var STATE = { IDLE: 0, SWAPPING: 1, CLEARING: 2, FALLING: 3, FILLING: 4, CHECKING: 5, OVER: 6 };
-  var state, selected, score, best, combo;
-  var animT = 0;   // generic timer for current animation phase
-  var swapA, swapB, swapBack; // swap animation targets
-
-  function reset() {
-    initGrid();
-    state = STATE.IDLE; selected = null; score = 0; combo = 0; animT = 0;
-    overlay.classList.add('hidden');
-    comboEl.classList.add('hidden');
-    renderHUD();
-  }
-
-  // ---- update ----
-  var SWAP_DUR   = 0.14;
-  var CLEAR_DUR  = 0.22;
-  var FALL_SPEED = 12; // cells per second
-
-  function update(dt) {
-    if (state === STATE.SWAPPING) {
-      animT += dt;
-      var t = clamp(animT / SWAP_DUR, 0, 1);
-      // animate both cells
-      swapA.anim.dx = lerp(0, swapA.dx, t);
-      swapA.anim.dy = lerp(0, swapA.dy, t);
-      swapB.anim.dx = lerp(0, swapB.dx, t);
-      swapB.anim.dy = lerp(0, swapB.dy, t);
-      if (t >= 1) {
-        swapA.anim.dx = swapA.anim.dy = swapB.anim.dx = swapB.anim.dy = 0;
-        if (swapBack) {
-          // no match — already swapped back in grid, just finish
-          state = STATE.IDLE;
-        } else {
-          state = STATE.CLEARING; animT = 0;
-          markAndScheduleClear();
+  // ---- tilt mechanics ----
+  function slide(D) {
+    var moved = false, r, c, i, line, t, n;
+    if (D === 'L' || D === 'R') {
+      for (r = 0; r < ROWS; r++) {
+        line = []; for (c = 0; c < COLS; c++) if (grid[r][c]) line.push({ t: grid[r][c], c: c });
+        for (c = 0; c < COLS; c++) grid[r][c] = null;
+        n = line.length;
+        for (i = 0; i < n; i++) {
+          var nc = (D === 'L') ? i : COLS - n + i;
+          t = line[i].t; t.ox += cx(line[i].c) - cx(nc); grid[r][nc] = t;
+          if (nc !== line[i].c) moved = true;
         }
       }
-    } else if (state === STATE.CLEARING) {
-      animT += dt;
-      var t2 = clamp(animT / CLEAR_DUR, 0, 1);
-      for (var r = 0; r < ROWS; r++)
-        for (var c = 0; c < COLS; c++)
-          if (clearMask[r][c]) cellAnim[r][c].scale = 1 - t2;
-      if (t2 >= 1) { applyClears(); state = STATE.FALLING; }
-    } else if (state === STATE.FALLING) {
-      // move gems down into empty (-1) slots
-      var anyFalling = false;
-      for (var c2 = 0; c2 < COLS; c2++) {
-        // find bottom-most empty, then pull gem from above
-        for (var r2 = ROWS - 1; r2 >= 0; r2--) {
-          if (grid[r2][c2] === -1) {
-            // find nearest gem above
-            var src = r2 - 1;
-            while (src >= 0 && grid[src][c2] === -1) src--;
-            if (src >= 0) {
-              // move gem from src to r2
-              grid[r2][c2] = grid[src][c2];
-              grid[src][c2] = -1;
-              var a = cellAnim[r2][c2];
-              a.dy = -(r2 - src); a.scale = 1; a.alpha = 1;
-            }
-          }
-        }
-        // animate fall
-        for (var r3 = 0; r3 < ROWS; r3++) {
-          var a2 = cellAnim[r3][c2];
-          if (a2.dy < 0) {
-            a2.dy = Math.min(0, a2.dy + FALL_SPEED * dt);
-            anyFalling = true;
-          }
-        }
-      }
-      if (!anyFalling) { state = STATE.FILLING; }
-    } else if (state === STATE.FILLING) {
-      // fill remaining -1 from top with new random gems
-      var filled = false;
-      for (var c3 = 0; c3 < COLS; c3++) {
-        for (var r4 = 0; r4 < ROWS; r4++) {
-          if (grid[r4][c3] === -1) {
-            grid[r4][c3] = rand(activeColors());
-            var a3 = cellAnim[r4][c3];
-            a3.dy = -1; a3.scale = 0.6; a3.alpha = 0;
-            filled = true;
-          }
-        }
-      }
-      if (filled) {
-        state = STATE.FALLING;
-      } else {
-        state = STATE.CHECKING;
-      }
-    } else if (state === STATE.CHECKING) {
-      // fade in any newly placed gems
-      var settling = false;
-      for (var r5 = 0; r5 < ROWS; r5++)
-        for (var c4 = 0; c4 < COLS; c4++) {
-          var a4 = cellAnim[r5][c4];
-          if (a4.scale < 1) { a4.scale = Math.min(1, a4.scale + dt * 5); settling = true; }
-          if (a4.alpha < 1) { a4.alpha = Math.min(1, a4.alpha + dt * 5); settling = true; }
-        }
-      if (!settling) {
-        var m = findMatches();
-        if (m) { combo++; showCombo(); state = STATE.CLEARING; animT = 0; clearMask = m; scoreClears(m); }
-        else {
-          combo = 0; comboEl.classList.add('hidden');
-          if (!hasValidMoves()) { gameOver(); }
-          else { state = STATE.IDLE; }
+    } else {
+      for (c = 0; c < COLS; c++) {
+        line = []; for (r = 0; r < ROWS; r++) if (grid[r][c]) line.push({ t: grid[r][c], r: r });
+        for (r = 0; r < ROWS; r++) grid[r][c] = null;
+        n = line.length;
+        for (i = 0; i < n; i++) {
+          var nr = (D === 'U') ? i : ROWS - n + i;
+          t = line[i].t; t.oy += cy(line[i].r) - cy(nr); grid[nr][c] = t;
+          if (nr !== line[i].r) moved = true;
         }
       }
     }
-
-    particles.update(dt); popups.update(dt); shakeOff = shake.update(dt);
+    return moved;
   }
 
-  var clearMask = null;
-
-  function markAndScheduleClear() {
-    var m = findMatches();
-    if (!m) { state = STATE.IDLE; return; } // shouldn't happen
-    clearMask = m;
-    combo++;
-    showCombo();
-    scoreClears(m);
+  function findRuns() {
+    var marked = [], r, c;
+    for (r = 0; r < ROWS; r++) { marked.push([]); for (c = 0; c < COLS; c++) marked[r].push(false); }
+    var any = false, maxRun = 0;
+    for (r = 0; r < ROWS; r++) for (c = 0; c < COLS;) {
+      if (!grid[r][c]) { c++; continue; }
+      var col = grid[r][c].color, len = 1;
+      while (c + len < COLS && grid[r][c + len] && grid[r][c + len].color === col) len++;
+      if (len >= 3) { for (var i = 0; i < len; i++) marked[r][c + i] = true; any = true; maxRun = Math.max(maxRun, len); }
+      c += len;
+    }
+    for (c = 0; c < COLS; c++) for (r = 0; r < ROWS;) {
+      if (!grid[r][c]) { r++; continue; }
+      var col2 = grid[r][c].color, len2 = 1;
+      while (r + len2 < ROWS && grid[r + len2][c] && grid[r + len2][c].color === col2) len2++;
+      if (len2 >= 3) { for (var j = 0; j < len2; j++) marked[r + j][c] = true; any = true; maxRun = Math.max(maxRun, len2); }
+      r += len2;
+    }
+    var count = 0;
+    for (r = 0; r < ROWS; r++) for (c = 0; c < COLS; c++) if (marked[r][c]) count++;
+    return { any: any, marked: marked, count: count, maxRun: maxRun };
   }
 
-  function scoreClears(m) {
-    var n = countMarked(m);
-    var base = PTS[Math.min(n, PTS.length - 1)];
-    var pts  = base * Math.max(1, combo);
+  function clearRuns(res, chain) {
+    var pts = res.count * 10 * chain, sx = 0, sy = 0;
+    for (var r = 0; r < ROWS; r++) for (var c = 0; c < COLS; c++) if (res.marked[r][c]) {
+      var t = grid[r][c]; var px = cx(c) + (t ? t.ox : 0), py = cy(r) + (t ? t.oy : 0);
+      sx += px; sy += py;
+      particles.burst(px, py, { count: 7, colors: [GEMS[t.color][0], GEMS[t.color][1], '#fff'], speed: 130, life: 0.5, size: 4 });
+      grid[r][c] = null;
+    }
     score += pts;
-    if (score > best) { best = score; Retention.set(GAME, 'best', score); }
-    // burst particles at centroid of matches
-    var cx = 0, cy = 0, cnt = 0;
-    for (var r = 0; r < ROWS; r++) for (var c = 0; c < COLS; c++) if (m[r][c]) {
-      cx += OX + c * CELL + CELL / 2; cy += OY + r * CELL + CELL / 2; cnt++;
-    }
-    if (cnt) {
-      cx /= cnt; cy /= cnt;
-      var col = grid[0][0]; // any color from first match for hue — pick first marked
-      outer: for (var r2 = 0; r2 < ROWS; r2++) for (var c2 = 0; c2 < COLS; c2++) if (m[r2][c2]) { col = grid[r2][c2]; break outer; }
-      var gc = GEMS[col];
-      particles.burst(cx, cy, { count: 6 + n * 2, colors: [gc[0], gc[1], '#fff'], speed: 130, life: 0.55, size: 5 });
-    }
-    if (combo > 1) shake.add(Math.min(6, combo + 1), 0.18);
-    Juice.Audio.play('merge', Math.min(combo, 8));
-    Juice.vibrate(combo > 1 ? [10, 15, 10] : 8);
-    scoreEl.textContent = score; bestEl.textContent = best;
-    if (pts > 0) popups.add(cx || CW/2, cy || CH/2, '+' + pts, { color: '#fff', size: Math.min(26, 14 + combo * 3), life: 0.8 });
+    if (score > best) { best = score; Retention.set(GAME, 'best', best); }
+    if (res.count) popups.add(sx / res.count, sy / res.count, '+' + pts, { color: '#fff', size: Math.min(28, 14 + chain * 3) });
+    shake.add(Math.min(8, 2 + chain + (res.maxRun >= 5 ? 3 : 0)), 0.18);
+    Juice.Audio.play('merge', Math.min(chain + res.maxRun, 10)); Juice.vibrate(chain > 1 ? [10, 12, 10] : 8);
   }
 
-  function applyClears() {
-    for (var r = 0; r < ROWS; r++) for (var c = 0; c < COLS; c++) if (clearMask[r][c]) {
-      grid[r][c] = -1;
-      cellAnim[r][c].scale = 0;
+  // clear+slide loop in direction D; mutates the clearedNow/maxRun/chain accumulator
+  function resolveLoop(D, acc) {
+    var guard = 0;
+    while (guard++ < 120) {
+      var res = findRuns();
+      if (!res.any) break;
+      acc.chain++;
+      clearRuns(res, acc.chain);
+      acc.cleared += res.count; acc.maxRun = Math.max(acc.maxRun, res.maxRun);
+      slide(D);
     }
   }
 
-  function showCombo() {
-    if (combo < 2) { comboEl.classList.add('hidden'); return; }
-    comboEl.textContent = 'x' + combo + ' combo!';
-    comboEl.classList.remove('hidden');
-  }
-
-  // ---- input ----
-  function cellAt(clientX, clientY) {
-    var b = canvas.getBoundingClientRect();
-    var px = (clientX - b.left) * (CW / b.width)  - OX;
-    var py = (clientY - b.top)  * (CH / b.height) - OY;
-    var c = Math.floor(px / CELL), r = Math.floor(py / CELL);
-    if (r < 0 || r >= ROWS || c < 0 || c >= COLS) return null;
-    return { r: r, c: c };
-  }
-
-  function isAdjacent(a, b) {
-    return (a.r === b.r && Math.abs(a.c - b.c) === 1) ||
-           (a.c === b.c && Math.abs(a.r - b.r) === 1);
-  }
-
-  function onTap(clientX, clientY) {
-    if (state !== STATE.IDLE) return;
-    var cell = cellAt(clientX, clientY);
-    if (!cell) return;
-    Juice.Audio.unlock();
-
-    if (!selected) {
-      selected = cell;
-      Juice.Audio.play('tap');
+  function applyTilt(D) {
+    if (busy || over) return;
+    var moved = slide(D);
+    var acc = { chain: 0, cleared: 0, maxRun: 0 };
+    resolveLoop(D, acc);
+    if (!moved && acc.cleared === 0) { // nothing happened
+      if (countEmpty() === 0) { if (mode === 'endless') gameOver(); else levelFailed(true); }
       return;
     }
+    // replenish, then resolve anything the new gems create
+    spawnGems(SPAWN_PER_TILT, D);
+    slide(D);
+    resolveLoop(D, acc);
 
-    if (selected.r === cell.r && selected.c === cell.c) {
-      selected = null; return;
+    busy = true;
+    clearedThisLevel += acc.cleared;
+    if (acc.cleared) { toastIf(Progress.bumpMission(GAME, 'm_clear', acc.cleared)); toastIf(Progress.bumpMission(GAME, 'm_score', acc.cleared * 10)); }
+    if (acc.chain >= 4) toastIf(Progress.bumpMission(GAME, 'm_combo', 1));
+    if (acc.maxRun >= 5) toastIf(Progress.bumpMission(GAME, 'm_big', 1));
+    if (mode === 'level') tiltsLeft--;
+    renderHUD();
+    pendingResolve = true; // objective/fail checked once the slide settles (update())
+  }
+  var pendingResolve = false;
+
+  function settled() {
+    for (var r = 0; r < ROWS; r++) for (var c = 0; c < COLS; c++) {
+      var t = grid[r][c]; if (!t) continue;
+      if (Math.abs(t.ox) > 0.5 || Math.abs(t.oy) > 0.5 || t.scale < 0.98) return false;
     }
-
-    if (!isAdjacent(selected, cell)) {
-      selected = cell; Juice.Audio.play('tap'); return;
-    }
-
-    // attempt swap
-    var r1 = selected.r, c1 = selected.c, r2 = cell.r, c2 = cell.c;
-    selected = null;
-    doSwap(r1, c1, r2, c2);
-    var m = findMatches();
-    var back = !m;
-    if (back) doSwap(r1, c1, r2, c2); // revert in grid; anim still plays then reverses
-
-    // cell offset in rows/cols
-    var dr = r2 - r1, dc = c2 - c1;
-    swapA = { r: r1, c: c1, anim: cellAnim[r1][c1], dx: dc, dy: dr };
-    swapB = { r: r2, c: c2, anim: cellAnim[r2][c2], dx: -dc, dy: -dr };
-    // reset anim offsets
-    swapA.anim.dx = 0; swapA.anim.dy = 0;
-    swapB.anim.dx = 0; swapB.anim.dy = 0;
-    swapBack = back;
-    state = STATE.SWAPPING; animT = 0;
-    Juice.Audio.play(back ? 'lose' : 'pop'); // subtle fail vs succeed sound
-    Juice.vibrate(back ? 20 : 8);
+    return true;
   }
 
-  canvas.addEventListener('pointerdown', function (e) { e.preventDefault(); onTap(e.clientX, e.clientY); });
-  canvas.addEventListener('touchstart',  function (e) { e.preventDefault(); }, { passive: false });
+  function postTilt() {
+    busy = false;
+    var full = countEmpty() === 0;
+    if (mode === 'level') {
+      var met = def.goal === 'clear' ? clearedThisLevel >= def.target : score >= def.target;
+      if (met) { levelComplete(); return; }
+      if (tiltsLeft <= 0 || full) { levelFailed(full); return; }
+    } else if (full) { gameOver(); }
+  }
 
-  // ---- render ----
-  var particles = new Juice.Particles();
-  var popups    = new Juice.Popups();
-  var shake     = new Juice.Shake();
-  var shakeOff  = { x: 0, y: 0 };
+  function gameOver() {
+    if (over) return; over = true; Portal.gameStop();
+    Juice.Audio.play('lose'); Juice.vibrate([20, 40, 20]); shake.add(10, 0.4);
+    Retention.submitScore(GAME, score);
+    var isBest = score >= best && score > 0;
+    ovTitle.textContent = isBest ? 'New Best! 🏆' : 'Board full!';
+    ovSub.textContent = isBest ? 'You beat your record.' : 'No room left to slide.';
+    ovScore.textContent = score; ovBest.textContent = best;
+    ovContinue.style.display = (Portal.available && !usedContinue) ? '' : 'none';
+    overlay.classList.remove('hidden');
+  }
 
-  var CELL_PAD = 3;
-  var CELL_R   = 8;
+  // ---- levels ----
+  function startLevel(n) {
+    if (n > LEVELS.length) { startEndless(); return; }
+    mode = 'level'; level = n; def = LEVELS[n - 1];
+    score = 0; clearedThisLevel = 0; tiltsLeft = def.tilts; over = false; busy = false; usedContinue = false;
+    particles.list = []; popups.list = [];
+    initBoard(); overlay.classList.add('hidden'); renderHUD();
+    var obj = def.goal === 'clear' ? 'Clear <b>' + def.target + '</b> gems' : 'Score <b>' + def.target + '</b>';
+    Stage.levelIntro(n, obj + ' in <b>' + def.tilts + '</b> tilts. Swipe to slide every gem.', function () { Portal.gameStart(); });
+  }
+  function startEndless() {
+    mode = 'endless'; level = 0; def = null;
+    score = 0; clearedThisLevel = 0; tiltsLeft = Infinity; over = false; busy = false; usedContinue = false;
+    particles.list = []; popups.list = [];
+    initBoard(); overlay.classList.add('hidden'); renderHUD(); Portal.gameStart();
+  }
 
-  function drawGem(cx, cy, size, colorIdx, alpha) {
-    if (size <= 0 || alpha <= 0) return;
-    var x = cx - size / 2, y = cy - size / 2;
-    var w = size, h = size;
-    var r = CELL_R * (size / CELL);
-    var gc = GEMS[colorIdx];
+  function levelComplete() {
+    over = true; Portal.gameStop();
+    var stars = tiltsLeft >= def.tilts * 0.5 ? 3 : tiltsLeft >= def.tilts * 0.25 ? 2 : 1;
+    Progress.completeLevel(GAME, level, stars); Progress.addCoins(GAME, stars * 10);
+    toastIf(Progress.bumpMission(GAME, 'm_levels', 1));
+    Juice.Audio.play('win'); Portal.happytime();
+    var last = level >= LEVELS.length; if (last) Progress.unlock(GAME, 'endless');
+    Stage.levelComplete({
+      level: level, stars: stars, body: '+' + (stars * 10) + ' coins' + (last ? ' · Endless unlocked!' : ''),
+      nextLabel: last ? 'Play Endless' : 'Next level',
+      onNext: function () { Portal.commercialBreak(function () { startLevel(level + 1); }); },
+      onRetry: function () { startLevel(level); }
+    });
+  }
+  function levelFailed(full) {
+    over = true; Portal.gameStop(); Juice.Audio.play('lose'); shake.add(8, 0.3);
+    Stage.card({
+      kicker: 'Level ' + level, title: full ? 'Board full' : 'Out of tilts',
+      body: def.goal === 'clear' ? ('Cleared ' + clearedThisLevel + ' / ' + def.target + ' gems.') : ('Scored ' + score + ' / ' + def.target + '.'),
+      actions: [
+        { label: 'Retry', onClick: function () { Portal.commercialBreak(function () { startLevel(level); }); } },
+        { label: 'Missions', ghost: true, onClick: showMenu }
+      ]
+    });
+  }
 
-    ctx.globalAlpha = alpha;
-    // glow for large gems
-    if (size > CELL * 0.6) {
-      ctx.shadowColor = gc[2]; ctx.shadowBlur = size * 0.35;
+  // ---- HUD / menu ----
+  function renderHUD() {
+    scoreEl.textContent = score; bestEl.textContent = best;
+    if (mode === 'level') { goalEl.innerHTML = 'Lv' + level + ' · ' + def.name; movesEl.style.display = ''; movesEl.textContent = 'Tilts ' + Math.max(0, tiltsLeft); }
+    else { goalEl.textContent = 'Endless'; movesEl.style.display = 'none'; }
+  }
+  function toastIf(m) { if (m) Stage.toast(wrap, '✓ ' + m.text + '  +' + m.reward, 1600); }
+  function showMenu() {
+    var missions = Progress.dailyMissions(GAME, MISSIONS, 3);
+    var body = '<div style="font-size:13px;color:var(--muted);margin:-6px 0 10px">🪙 ' + Progress.coins(GAME) + ' · ★ ' + Progress.totalStars(GAME) + '</div>'
+      + '<div style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);text-align:left;margin-bottom:4px">Daily missions</div>'
+      + Stage.missionsHTML(missions);
+    var actions = [{ label: 'Back', onClick: function () {} }];
+    if (Progress.unlocked(GAME, 'endless')) actions.unshift({ label: 'Endless mode', ghost: true, onClick: startEndless });
+    Stage.card({ kicker: 'Gem Drop', title: 'Missions', body: body, actions: actions });
+  }
+
+  // ---- update / draw ----
+  function update(dt) {
+    for (var r = 0; r < ROWS; r++) for (var c = 0; c < COLS; c++) {
+      var t = grid[r][c]; if (!t) continue;
+      if (Math.abs(t.ox) > 0.5) t.ox += (0 - t.ox) * Math.min(1, dt * 16); else t.ox = 0;
+      if (Math.abs(t.oy) > 0.5) t.oy += (0 - t.oy) * Math.min(1, dt * 16); else t.oy = 0;
+      if (t.scale < 1) t.scale = Math.min(1, t.scale + dt * 6);
+      if (t.alpha < 1) t.alpha = Math.min(1, t.alpha + dt * 6);
     }
-    var g = ctx.createLinearGradient(cx, y, cx, y + h);
-    g.addColorStop(0, gc[0]); g.addColorStop(1, gc[1]);
-    ctx.fillStyle = g;
-    roundRect(x, y, w, h, r); ctx.fill();
-    ctx.shadowBlur = 0;
-    // highlight
-    ctx.globalAlpha = alpha * 0.28; ctx.fillStyle = '#fff';
-    roundRect(x + w * 0.15, y + h * 0.1, w * 0.5, h * 0.25, r * 0.6); ctx.fill();
-    ctx.globalAlpha = 1;
+    if (pendingResolve && settled()) { pendingResolve = false; postTilt(); }
+    particles.update(dt); popups.update(dt); shakeOff = shake.update(dt);
   }
 
   function roundRect(x, y, w, h, r) {
     r = Math.min(r, w / 2, h / 2);
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.arcTo(x + w, y,     x + w, y + h, r);
-    ctx.arcTo(x + w, y + h, x,     y + h, r);
-    ctx.arcTo(x,     y + h, x,     y,     r);
-    ctx.arcTo(x,     y,     x + w, y,     r);
-    ctx.closePath();
+    ctx.beginPath(); ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
   }
-
+  function drawTile(t, r, c) {
+    var s = (CELL - 6) * t.scale; if (s <= 0) return;
+    var px = cx(c) + t.ox, py = cy(r) + t.oy;
+    var g = GEMS[t.color];
+    ctx.globalAlpha = t.alpha;
+    if (s > CELL * 0.6) { ctx.shadowColor = g[2]; ctx.shadowBlur = s * 0.3; }
+    var grad = ctx.createLinearGradient(px, py - s / 2, px, py + s / 2);
+    grad.addColorStop(0, g[0]); grad.addColorStop(1, g[1]);
+    ctx.fillStyle = grad; roundRect(px - s / 2, py - s / 2, s, s, s * 0.26); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = t.alpha * 0.55; ctx.fillStyle = 'rgba(0,0,0,.5)';
+    ctx.font = '700 ' + (s * 0.42) + 'px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(GLYPH[t.color], px, py + s * 0.02);
+    ctx.globalAlpha = 1;
+  }
   function draw() {
-    ctx.clearRect(0, 0, CW, CH);
+    ctx.clearRect(0, 0, GW, GH);
     ctx.save(); ctx.translate(shakeOff.x, shakeOff.y);
-
-    // board background
-    ctx.fillStyle = 'rgba(255,255,255,0.04)';
-    roundRect(OX - 1, OY - 1, COLS * CELL + 2, ROWS * CELL + 2, 10); ctx.fill();
-
-    // grid lines
-    ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
-    for (var r = 0; r <= ROWS; r++) {
-      ctx.beginPath(); ctx.moveTo(OX, OY + r * CELL); ctx.lineTo(OX + COLS * CELL, OY + r * CELL); ctx.stroke();
-    }
-    for (var c = 0; c <= COLS; c++) {
-      ctx.beginPath(); ctx.moveTo(OX + c * CELL, OY); ctx.lineTo(OX + c * CELL, OY + ROWS * CELL); ctx.stroke();
-    }
-
-    // gems
-    for (var r2 = 0; r2 < ROWS; r2++) {
-      for (var c2 = 0; c2 < COLS; c2++) {
-        var col = grid[r2][c2];
-        if (col < 0) continue;
-        var a = cellAnim[r2][c2];
-        // swap offset in cells
-        var odx = (a.dx || 0), ody = (a.dy || 0);
-        var cx = OX + (c2 + odx) * CELL + CELL / 2;
-        var cy = OY + (r2 + ody) * CELL + CELL / 2;
-        var size = (CELL - CELL_PAD * 2) * (a.scale != null ? a.scale : 1);
-        drawGem(cx, cy, size, col, a.alpha != null ? a.alpha : 1);
-      }
-    }
-
-    // selected highlight
-    if (selected && state === STATE.IDLE) {
-      var sx = OX + selected.c * CELL, sy = OY + selected.r * CELL;
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.globalAlpha = 0.7;
-      roundRect(sx + 2, sy + 2, CELL - 4, CELL - 4, CELL_R); ctx.stroke();
-      ctx.globalAlpha = 1;
-    }
-
+    ctx.fillStyle = 'rgba(255,255,255,.03)'; roundRect(0, 0, GW, GH, 12); ctx.fill();
+    for (var r = 0; r < ROWS; r++) for (var c = 0; c < COLS; c++) if (grid[r][c]) drawTile(grid[r][c], r, c);
     particles.draw(ctx); popups.draw(ctx);
     ctx.restore();
   }
 
-  // ---- HUD ----
-  function renderHUD() {
-    scoreEl.textContent = score; bestEl.textContent = best;
-  }
-
-  // ---- game over ----
-  function gameOver() {
-    state = STATE.OVER;
-    Juice.Audio.play('lose'); Juice.vibrate([20, 40, 20]); shake.add(8, 0.35);
-    Retention.submitScore(GAME, score);
-    var isBest = score >= best && score > 0;
-    ovTitle.textContent = isBest ? 'New Best! 🏆' : 'No Moves!';
-    ovSub.textContent   = isBest ? 'You beat your record.' : 'The board ran out of valid swaps.';
-    ovScore.textContent = score; ovBest.textContent = best;
-    overlay.classList.remove('hidden');
-  }
-
-  // ---- lifecycle ----
-  document.getElementById('new').addEventListener('click', function () { Portal.commercialBreak(function () { Portal.gameStop(); reset(); Portal.gameStart(); }); });
-  document.getElementById('mute').addEventListener('click', function () {
-    var _m = Juice.Audio.toggleMute(); Retention.set(GAME, 'muted', _m); Portal.mute(_m); this.textContent = _m ? '🔇' : '🔊';
+  // ---- input: swipe + arrows ----
+  var sx0 = 0, sy0 = 0, sw = false;
+  canvas.addEventListener('pointerdown', function (e) { sx0 = e.clientX; sy0 = e.clientY; sw = true; Juice.Audio.unlock(); });
+  window.addEventListener('pointerup', function (e) {
+    if (!sw) return; sw = false;
+    var dx = e.clientX - sx0, dy = e.clientY - sy0, ax = Math.abs(dx), ay = Math.abs(dy);
+    if (Math.max(ax, ay) < 18) return;
+    applyTilt(ax > ay ? (dx > 0 ? 'R' : 'L') : (dy > 0 ? 'D' : 'U'));
   });
-  ovAgain.addEventListener('click', function () { Portal.commercialBreak(function () { Portal.gameStop(); reset(); Portal.gameStart(); }); });
+  canvas.addEventListener('touchmove', function (e) { e.preventDefault(); }, { passive: false });
+  window.addEventListener('keydown', function (e) {
+    var D = { ArrowLeft: 'L', ArrowRight: 'R', ArrowUp: 'U', ArrowDown: 'D', a: 'L', d: 'R', w: 'U', s: 'D' }[e.key];
+    if (D) { e.preventDefault(); applyTilt(D); }
+  }, { passive: false });
 
+  document.getElementById('new').addEventListener('click', function () {
+    Portal.commercialBreak(function () { Portal.gameStop(); mode === 'endless' ? startEndless() : startLevel(level); });
+  });
+  document.getElementById('menu').addEventListener('click', showMenu);
+  var muteBtn = document.getElementById('mute');
+  muteBtn.addEventListener('click', function () { var m = Juice.Audio.toggleMute(); Retention.set(GAME, 'muted', m); Portal.mute(m); this.textContent = m ? '🔇' : '🔊'; });
+  ovAgain.addEventListener('click', function () { Portal.commercialBreak(function () { Portal.gameStop(); startEndless(); }); });
+  ovContinue.addEventListener('click', function () {
+    Portal.rewardedAd(function () {
+      usedContinue = true; over = false;
+      var filled = []; for (var r = 0; r < ROWS; r++) for (var c = 0; c < COLS; c++) if (grid[r][c]) filled.push([r, c]);
+      for (var i = filled.length - 1; i > 0; i--) { var j = rand(i + 1); var t = filled[i]; filled[i] = filled[j]; filled[j] = t; }
+      var rm = Math.min(12, filled.length);
+      for (i = 0; i < rm; i++) grid[filled[i][0]][filled[i][1]] = null;
+      overlay.classList.add('hidden'); renderHUD(); Portal.gameStart();
+    }, function () {});
+  });
+
+  // ---- boot ----
   function boot() {
-    layout();
-    best = Retention.best(GAME);
-    bestEl.textContent = best;
-    streakEl.innerHTML = '🔥 ' + Retention.touchStreak(GAME) + '&nbsp;day streak';
-    reset();
+    Portal.loadingStart(); layout();
+    best = Retention.best(GAME); Retention.touchStreak(GAME);
+    if (Retention.get(GAME, 'muted', false)) { Juice.Audio.setMuted(true); muteBtn.textContent = '🔇'; }
+    mode = 'level'; level = Math.min(Progress.level(GAME), LEVELS.length); def = LEVELS[level - 1];
+    score = 0; clearedThisLevel = 0; tiltsLeft = def.tilts; over = false; busy = false;
+    initBoard(); renderHUD();
     if (window.ResizeObserver) new ResizeObserver(layout).observe(wrap);
     window.addEventListener('resize', layout);
     window.addEventListener('orientationchange', function () { setTimeout(layout, 200); });
     var last = performance.now();
-    function frame(now) {
-      var dt = Math.min(0.05, (now - last) / 1000); last = now;
-      update(dt); draw();
-      requestAnimationFrame(frame);
-    }
-    requestAnimationFrame(frame);
+    (function frame(now) { var dt = Math.min(0.05, (now - last) / 1000); last = now; update(dt); draw(); requestAnimationFrame(frame); })(performance.now());
+    Portal.init().then(function () {
+      Portal.loadingStop(); Portal.mute(Juice.Audio.isMuted());
+      var L = document.getElementById('loader'); if (L) L.classList.add('hidden');
+      if (!Retention.get(GAME, 'taught', false)) {
+        Retention.set(GAME, 'taught', true);
+        Stage.card({ kicker: 'How to play', title: 'Tilt to match',
+          body: 'Swipe (or arrow keys) to <b>tilt the board</b> — every gem slides that way. Line up <b>3+</b> of a color to clear them; cascades score big.',
+          actions: [{ label: 'Got it', onClick: function () { startLevel(level); } }] });
+      } else { startLevel(level); }
+    });
   }
 
   // ---- headless test hook ----
   window.__match3 = {
-    swap: function (r1, c1, r2, c2) {
-      if (state !== STATE.IDLE) return false;
-      doSwap(r1, c1, r2, c2);
-      var m = findMatches();
-      var back = !m;
-      if (back) doSwap(r1, c1, r2, c2);
-      var dr = r2 - r1, dc = c2 - c1;
-      swapA = { r: r1, c: c1, anim: cellAnim[r1][c1], dx: dc, dy: dr };
-      swapB = { r: r2, c: c2, anim: cellAnim[r2][c2], dx: -dc, dy: -dr };
-      swapA.anim.dx = 0; swapA.anim.dy = 0;
-      swapB.anim.dx = 0; swapB.anim.dy = 0;
-      swapBack = back;
-      state = STATE.SWAPPING; animT = 0;
-      return !back;
-    },
-    tick: function (n, dt) {
-      dt = dt || 1/60; n = n || 1;
-      for (var i = 0; i < n; i++) update(dt);
-    },
+    tilt: function (d) { applyTilt(({ L: 'L', R: 'R', U: 'U', D: 'D', left: 'L', right: 'R', up: 'U', down: 'D' })[d] || d); },
     state: function () {
-      var empty = 0; for (var r = 0; r < ROWS; r++) for (var c = 0; c < COLS; c++) if (grid[r][c] < 0) empty++;
-      return { phase: state, score: score, combo: combo, empty: empty, over: state === STATE.OVER };
+      var g = []; for (var r = 0; r < ROWS; r++) { g.push([]); for (var c = 0; c < COLS; c++) g[r].push(grid[r][c] ? grid[r][c].color : -1); }
+      return { grid: g, score: score, best: best, tilts: tiltsLeft, mode: mode, level: level, cleared: clearedThisLevel, over: over, busy: busy };
     },
-    grid: function () { return grid.map(function(r){return r.slice();}); },
-    reset: reset
+    tick: function (n, dt) { dt = dt || 1 / 60; for (var i = 0; i < (n || 1); i++) update(dt); },
+    settle: function () { for (var i = 0; i < 240 && !settled(); i++) update(1 / 60); if (pendingResolve) { pendingResolve = false; postTilt(); } },
+    startLevel: startLevel, startEndless: startEndless,
+    reset: function () { startLevel(Math.min(Progress.level(GAME), LEVELS.length)); }
   };
 
+  (function () { if (overlay && window.MutationObserver) new MutationObserver(function () { if (!overlay.classList.contains('hidden')) Portal.gameStop(); }).observe(overlay, { attributes: true, attributeFilter: ['class'] }); })();
 
-  // gameplayStop when the game-over/result overlay appears
-  (function () {
-    var _ov = document.getElementById('overlay');
-    if (_ov && window.MutationObserver) {
-      new MutationObserver(function () {
-        if (!_ov.classList.contains('hidden')) Portal.gameStop();
-      }).observe(_ov, { attributes: true, attributeFilter: ['class'] });
-    }
-  })();
-
-  // ---- portal (CrazyGames SDK) lifecycle ----
-  if (Retention.get(GAME, 'muted', false)) {
-    Juice.Audio.setMuted(true);
-    var _mb = document.getElementById('mute'); if (_mb) _mb.textContent = '🔇';
-  }
-  Portal.loadingStart();
   boot();
-  Portal.init().then(function () {
-    Portal.loadingStop();
-    var _L = document.getElementById('loader'); if (_L) _L.classList.add('hidden');
-    Portal.gameStart();
-  });
 })();
