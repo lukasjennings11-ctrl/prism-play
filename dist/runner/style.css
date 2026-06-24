@@ -124,3 +124,8 @@ html, body {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { #loader .spinner { animation: none; } }
+
+/* color-runner HUD chips */
+.subbar { gap: 8px; }
+.goal { color: var(--text); font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.combo { color: var(--muted); font-size: 14px; font-weight: 800; background: rgba(255,255,255,.06); border-radius: 999px; padding: 3px 12px; white-space: nowrap; transition: color .15s ease; }

@@ -2,8 +2,8 @@
   "slug": "fuse",
   "title": "Fuse",
   "genre": "merge",
-  "tagline": "Swipe to fuse matching tiles and chase 2048.",
-  "controls": "Swipe or arrow keys",
-  "tags": ["puzzle", "casual", "mobile", "highscore", "2048"],
+  "tagline": "Draw a path through matching tiles to fuse them — longer chains build bigger tiers.",
+  "controls": "Drag across touching tiles of the same number",
+  "tags": ["puzzle", "merge", "chain", "levels", "casual", "mobile"],
   "created": "2026-06-15"
 }

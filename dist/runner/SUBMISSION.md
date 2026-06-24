@@ -2,15 +2,15 @@
 
 **Title:** Dash Lanes
 
-**Tagline / short description:** Tap to switch lanes, dodge the traffic, outrun your best.
+**Tagline / short description:** Switch your color to match each gate and phase through — chain them for speed.
 
-**Instructions (how to play):** Tap left/right side of screen or arrow keys to switch lanes
+**Instructions (how to play):** Tap left/right (or arrow keys) to switch color
 
-**Controls:** Tap left/right side of screen or arrow keys to switch lanes
+**Controls:** Tap left/right (or arrow keys) to switch color
 
 **Orientation:** responsive — portrait + landscape, plays at 375px width and on desktop.
 
-**Tags:** arcade, casual, runner, endless, mobile, highscore
+**Tags:** arcade, reflex, color, runner, endless, levels, mobile
 
 **Description:**
 <2-3 sentences. What you do, the one-more-go hook, the goal.>

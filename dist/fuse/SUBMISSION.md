@@ -2,15 +2,15 @@
 
 **Title:** Fuse
 
-**Tagline / short description:** Swipe to fuse matching tiles and chase 2048.
+**Tagline / short description:** Draw a path through matching tiles to fuse them — longer chains build bigger tiers.
 
-**Instructions (how to play):** Swipe or arrow keys
+**Instructions (how to play):** Drag across touching tiles of the same number
 
-**Controls:** Swipe or arrow keys
+**Controls:** Drag across touching tiles of the same number
 
 **Orientation:** responsive — portrait + landscape, plays at 375px width and on desktop.
 
-**Tags:** puzzle, casual, mobile, highscore, 2048
+**Tags:** puzzle, merge, chain, levels, casual, mobile
 
 **Description:**
 <2-3 sentences. What you do, the one-more-go hook, the goal.>

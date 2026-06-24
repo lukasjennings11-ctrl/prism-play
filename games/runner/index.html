@@ -4,10 +4,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#07101a" />
-  <meta name="description" content="Three lanes, one survivor. Tap left or right. The traffic doesn't slow down." />
-  <meta property="og:title" content="Dash Lanes — Prism Play" />
-  <meta property="og:description" content="Tap to switch lanes, dodge the traffic, outrun your best." />
-  <title>Dash Lanes — endless runner · Prism Play</title>
+  <meta name="description" content="Switch your color to match each gate and phase through. Chain gates for speed combos. A fresh one-thumb color-runner — no install." />
+  <meta property="og:title" content="Dash Lanes" />
+  <meta property="og:description" content="Match your color to each gate and phase through. Chain for speed." />
+  <title>Dash Lanes — color-switch runner</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -21,11 +21,12 @@
       </div>
     </header>
     <div class="subbar">
-      <div class="streak" id="streak">🔥 0&nbsp;day streak</div>
-      <div class="speed-box">Speed ×<span id="speedmult">1.0</span></div>
+      <div class="goal" id="goal">Level 1</div>
+      <div class="combo" id="combo">x1</div>
       <div class="controls">
+        <button id="menu" class="icon-btn" aria-label="Missions">☰</button>
         <button id="mute" class="icon-btn" aria-label="Toggle sound">🔊</button>
-        <button id="new"  class="text-btn">New</button>
+        <button id="new"  class="text-btn">Restart</button>
       </div>
     </div>
     <div class="board-wrap">
@@ -33,38 +34,23 @@
       <div id="overlay" class="overlay hidden" role="dialog" aria-modal="true">
         <div class="panel">
           <h1 id="ov-title">Crashed!</h1>
-          <p  id="ov-sub">You hit an obstacle.</p>
+          <p  id="ov-sub">Wrong color.</p>
           <div class="ov-scores">
             <div><span class="label">Score</span><b id="ov-score">0</b></div>
             <div><span class="label">Best</span><b id="ov-best">0</b></div>
           </div>
           <button id="ov-again" class="cta">Run again</button>
-          <button id="ov-share" class="cta secondary" style="display:none">Share score</button>
+          <button id="ov-continue" class="cta secondary" style="display:none">Continue ▶</button>
         </div>
       </div>
     </div>
-    <p class="hint">Tap left/right side · <b>arrow keys</b> to switch lanes · near-miss scores a bonus</p>
+    <p class="hint">Tap <b>left / right</b> (or arrow keys) to switch color — match the gate to phase through.</p>
   </div>
-  <script src="../../shared/juice.js?v=1"></script>
-  <script src="../../shared/retention.js?v=1"></script>
-  <script src="../../shared/portal.js?v=1"></script>
-  <script src="game.js?v=1"></script>
-  <script>
-  (function(){
-    var btn = document.getElementById('ov-share');
-    var overlay = document.getElementById('overlay');
-    if (!btn || !overlay) return;
-    new MutationObserver(function(){
-      if (!overlay.classList.contains('hidden')) btn.style.display = '';
-      else { btn.style.display = 'none'; btn.textContent = 'Share score'; }
-    }).observe(overlay, {attributes:true, attributeFilter:['class']});
-    btn.addEventListener('click', function(){
-      var sc = (document.getElementById('ov-score')||{}).textContent || '?';
-      var text = 'Dash Lanes — ' + sc + ' pts!';
-      if (navigator.share) { navigator.share({title:'Dash Lanes',text:text}); }
-      else if (navigator.clipboard) { navigator.clipboard.writeText(text).then(function(){ btn.textContent='Copied ✓'; setTimeout(function(){ btn.textContent='Share score'; },2000); }); }
-    });
-  })();
-  </script>
+  <script src="../../shared/juice.js?v=2"></script>
+  <script src="../../shared/retention.js?v=2"></script>
+  <script src="../../shared/portal.js?v=2"></script>
+  <script src="../../shared/progression.js?v=2"></script>
+  <script src="../../shared/stage.js?v=2"></script>
+  <script src="game.js?v=2"></script>
 </body>
 </html>

@@ -48,8 +48,11 @@ html, body {
 .score .label { font-size: 10px; letter-spacing: 1.5px; color: var(--muted); }
 .score span:last-child, #score, #best { font-weight: 800; font-size: 20px; }
 
-.subbar { display: flex; align-items: center; justify-content: space-between; }
+.subbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .streak { color: var(--muted); font-size: 13px; font-weight: 600; }
+.goal { color: var(--text); font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.moves { color: var(--muted); font-size: 13px; font-weight: 700; white-space: nowrap; }
+.moves { background: rgba(255,255,255,.06); border-radius: 999px; padding: 3px 10px; }
 .controls { display: flex; gap: 8px; }
 .icon-btn, .text-btn, .cta {
   font-family: inherit; cursor: pointer; border: none; border-radius: 10px;
