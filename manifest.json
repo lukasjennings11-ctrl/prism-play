@@ -2,7 +2,7 @@
   "name": "Prism Play",
   "short_name": "Prism Play",
   "description": "Ten browser games. No installs. No accounts. Pick one and play.",
-  "start_url": "/",
+  "start_url": ".",
   "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#080d1e",

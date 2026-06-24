@@ -1,20 +1,20 @@
 const CACHE = 'prismplay-v2';
 const PRECACHE = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/icon-192.png',
-  '/icon-512.png',
-  '/games/fuse/index.html',
-  '/games/stack/index.html',
-  '/games/orbit/index.html',
-  '/games/match3/index.html',
-  '/games/bubble/index.html',
-  '/games/idle/index.html',
-  '/games/io/index.html',
-  '/games/runner/index.html',
-  '/games/equate/index.html',
-  '/games/td/index.html',
+  './',
+  'index.html',
+  'manifest.json',
+  'icon-192.png',
+  'icon-512.png',
+  'games/fuse/index.html',
+  'games/stack/index.html',
+  'games/orbit/index.html',
+  'games/match3/index.html',
+  'games/bubble/index.html',
+  'games/idle/index.html',
+  'games/io/index.html',
+  'games/runner/index.html',
+  'games/equate/index.html',
+  'games/td/index.html',
 ];
 
 self.addEventListener('install', e => {
@@ -42,7 +42,7 @@ self.addEventListener('fetch', e => {
           caches.open(CACHE).then(c => c.put(e.request, clone));
         }
         return res;
-      }).catch(() => caches.match('/index.html'));
+      }).catch(() => caches.match('index.html'));
     })
   );
 });
