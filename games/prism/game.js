@@ -93,7 +93,7 @@
   // ---- derived stats ----
   function dmgMul() { return 1 + 0.25 * up.dmg; }
   function fireInterval() { return (hardcore ? 0.78 : 0.7) / (1 + 0.18 * up.rate); }
-  function moveSpeed() { return (hardcore ? 138 : 150) * (1 + 0.12 * up.speed); }
+  function moveSpeed() { return (hardcore ? 215 : 240) * (1 + 0.1 * up.speed); }
   function pickRadius() { return 48 * (1 + 0.4 * up.magnet); }
 
   // ---- spawning ----
@@ -230,11 +230,15 @@
     if (player) { if (player.flash > 0) player.flash = Math.max(0, player.flash - dt * 2); if (player.hitCd > 0) player.hitCd -= dt; }
     if (running && !over && !choosing) {
       time += dt;
-      // movement
-      var sp = moveSpeed(), mvx = 0, mvy = 0;
-      if (joyActive) { mvx = joyVX; mvy = joyVY; } else { mvx = keyX; mvy = keyY; }
-      var ml = Math.hypot(mvx, mvy);
-      if (ml > 0.01) { player.x += (mvx / ml) * sp * dt; player.y += (mvy / ml) * sp * dt; }
+      // movement — keys take priority; otherwise steer toward the finger (direct follow)
+      var sp = moveSpeed();
+      if (keyX || keyY) {
+        var kl = Math.hypot(keyX, keyY);
+        player.x += (keyX / kl) * sp * dt; player.y += (keyY / kl) * sp * dt;
+      } else if (ptrActive) {
+        var dx = ptrX - player.x, dy = ptrY - player.y, d = Math.hypot(dx, dy);
+        if (d > 3) { var step = Math.min(sp * dt, d); player.x += (dx / d) * step; player.y += (dy / d) * step; }
+      }
       player.x = clamp(player.x, player.r, CW - player.r); player.y = clamp(player.y, player.r, CH - player.r);
       // regen
       if (up.regen && player.hp < player.maxHp) player.hp = Math.min(player.maxHp, player.hp + up.regen * 1.5 * dt);
@@ -339,8 +343,12 @@
       ctx.beginPath(); for (var v = 0; v < 3; v++) { var va = v * TAU / 3 - Math.PI / 2; var vx = Math.cos(va) * player.r, vy = Math.sin(va) * player.r; if (v) ctx.lineTo(vx, vy); else ctx.moveTo(vx, vy); } ctx.closePath();
       var pgr = ctx.createLinearGradient(-player.r, -player.r, player.r, player.r); pgr.addColorStop(0, NEON.mag); pgr.addColorStop(1, NEON.cyan);
       ctx.fillStyle = pgr; ctx.fill(); ctx.globalAlpha = 1; ctx.shadowBlur = 0; ctx.restore();
-      // joystick
-      if (joyActive) { ctx.globalAlpha = 0.18; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(joyOX, joyOY, 36, 0, TAU); ctx.fill(); ctx.globalAlpha = 0.4; ctx.beginPath(); ctx.arc(joyOX + clamp(joyRX, -36, 36), joyOY + clamp(joyRY, -36, 36), 16, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; }
+      // steering indicator (line from prism toward your finger + target ring)
+      if (ptrActive) {
+        ctx.globalAlpha = 0.45; ctx.strokeStyle = NEON.cyan; ctx.lineWidth = 1.5; ctx.setLineDash([4, 6]);
+        ctx.beginPath(); ctx.moveTo(player.x, player.y); ctx.lineTo(ptrX, ptrY); ctx.stroke(); ctx.setLineDash([]);
+        ctx.beginPath(); ctx.arc(ptrX, ptrY, 11, 0, TAU); ctx.stroke(); ctx.globalAlpha = 1;
+      }
     }
     particles.draw(ctx); popups.draw(ctx);
 
@@ -395,13 +403,15 @@
     Stage.card({ kicker: 'PRISM', title: 'Missions & Modes', body: body, actions: actions });
   }
 
-  // ---- input: floating joystick + keys ----
-  var joyActive = false, joyOX = 0, joyOY = 0, joyRX = 0, joyRY = 0, joyVX = 0, joyVY = 0;
+  // ---- input: direct follow-the-finger steering + keys ----
+  var ptrActive = false, ptrX = 0, ptrY = 0;
   var keyX = 0, keyY = 0, keyL = 0, keyR = 0, keyU = 0, keyD = 0;
   function cpt(clientX, clientY) { var b = canvas.getBoundingClientRect(); return { x: (clientX - b.left) * (CW / b.width), y: (clientY - b.top) * (CH / b.height) }; }
-  canvas.addEventListener('pointerdown', function (e) { var p = cpt(e.clientX, e.clientY); joyActive = true; joyOX = p.x; joyOY = p.y; joyRX = joyRY = joyVX = joyVY = 0; Juice.Audio.unlock(); });
-  canvas.addEventListener('pointermove', function (e) { if (!joyActive) return; var p = cpt(e.clientX, e.clientY); joyRX = p.x - joyOX; joyRY = p.y - joyOY; var l = Math.hypot(joyRX, joyRY); if (l > 1) { joyVX = joyRX / l; joyVY = joyRY / l; } });
-  window.addEventListener('pointerup', function () { joyActive = false; joyVX = joyVY = 0; });
+  function setPtr(e) { var p = cpt(e.clientX, e.clientY); ptrX = p.x; ptrY = p.y; }
+  canvas.addEventListener('pointerdown', function (e) { ptrActive = true; setPtr(e); Juice.Audio.unlock(); });
+  canvas.addEventListener('pointermove', function (e) { if (ptrActive) setPtr(e); });
+  window.addEventListener('pointerup', function () { ptrActive = false; });
+  window.addEventListener('pointercancel', function () { ptrActive = false; });
   canvas.addEventListener('touchmove', function (e) { e.preventDefault(); }, { passive: false });
   function syncKeys() { keyX = keyR - keyL; keyY = keyD - keyU; }
   window.addEventListener('keydown', function (e) {
@@ -447,7 +457,7 @@
         kicker: first ? 'How to play' : 'PRISM',
         title: first ? 'Survive the swarm' : 'Ready?',
         body: first
-          ? '<b>Drag anywhere to move</b> (or WASD / arrows). Your prism <b>fires automatically</b> at the nearest enemy. Grab the light they drop to <b>level up</b> and choose upgrades — stack <b>Refract</b> to split your beam into three. Don\'t get touched.'
+          ? 'Hold and drag — <b>your prism follows your finger</b> (or use WASD / arrows). It <b>fires automatically</b> at the nearest enemy. Grab the light they drop to <b>level up</b> and choose upgrades — stack <b>Refract</b> to split your beam into three. Don\'t get touched.'
           : 'Drag to move. Survive as long as you can.',
         actions: [{ label: 'Play ▶', onClick: startRun }]
       });
@@ -459,7 +469,7 @@
     start: function (mode) { reset(mode || 'classic'); running = true; over = false; },
     reset: reset,
     tick: function (n, dt) { dt = dt || 1 / 60; for (var i = 0; i < (n || 1); i++) update(dt); },
-    move: function (dx, dy) { joyActive = (dx || dy) ? true : false; var l = Math.hypot(dx, dy) || 1; joyVX = dx / l; joyVY = dy / l; },
+    move: function (dx, dy) { if (!dx && !dy) { ptrActive = false; return; } ptrActive = true; ptrX = player.x + dx * 1000; ptrY = player.y + dy * 1000; },
     spawn: function (type, x, y) { return spawnAt(type || 'grunt', x == null ? CW * 0.5 : x, y == null ? 40 : y); },
     pickUpgrade: function (i) { if (choosing) applyChoice(i || 0); },
     addXp: function (v) { gainXp(v || xpNext); },
