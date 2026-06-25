@@ -59,6 +59,7 @@
   var era = 0, scene = { city: [], blobs: [], crane: false, era: 0, founded: false, port: null };
   var cityModels = null, atlasTex = null, blobTex = null;   // glTF buildings (async) + shared atlas + shadow decal
   var founded = {};                                          // biomeId -> {x,z,yaw} (founded harbours)
+  var sites = [], selSite = -1;                              // curated harbour candidates + selected index
   function buildBiome(id) {
     if (!HARBOR_BIOMES[id]) id = 'green';
     biomeId = id; biome = HARBOR_BIOMES[id];
@@ -67,13 +68,15 @@
     var port = founded[id] || null;
     scene = HARBOR_MODELS.buildStatic({ fac: fac, grit: grit, flat: flat }, biome, rng, era, port) || { city: [], blobs: [], crane: false, era: era, founded: !!port, port: null };
     meshFac = E.mesh(fac.data()); meshGrit = E.mesh(grit.data()); meshFlat = E.mesh(flat.data());
+    sites = port ? [] : HARBOR_MODELS.sites(); selSite = -1;  // curated candidates only when wild
     if (window.Retention) Retention.set(GAME, 'biome', id);
+    if (typeof buildSiteChips === 'function') buildSiteChips();
     if (typeof updateFoundUI === 'function') updateFoundUI();
   }
   function loadFounded() { var f = window.Retention && Retention.get(GAME, 'founded', null); if (f && typeof f === 'object') founded = f; }
   function saveFounded() { if (window.Retention) Retention.set(GAME, 'founded', founded); }
-  function foundHere(x, z) {
-    var yaw = HARBOR_MODELS.portYaw(x, z);
+  function foundHere(x, z, yaw) {
+    if (yaw == null) yaw = HARBOR_MODELS.portYaw(x, z);
     founded[biomeId] = { x: x, z: z, yaw: yaw }; saveFounded();
     buildBiome(biomeId);
     C.txT = x; C.tzT = z; C.distT = 130; C.elT = 0.5;        // frame the new harbour
@@ -219,10 +222,14 @@
       gl.uniform3fv(M.u.uBase, parts[i].c); composeRYS(mModel, wx, wy, wz, parts[i].s[0], parts[i].s[1], parts[i].s[2], pf ? pf.yaw : 0); gl.uniformMatrix4fv(M.u.uModel, false, mModel); drawMesh(M, boxMesh);
     }
 
-    // founding marker (bright beacon at the spot being scouted)
-    if (pendingFound && foundMode()) {
-      var my = HARBOR_MODELS.heightAt(pendingFound.x, pendingFound.z);
-      gl.uniform3fv(M.u.uBase, [1.5, 1.2, 0.2]); composeRYS(mModel, pendingFound.x, my + 9, pendingFound.z, 1.3, 18, 1.3, 0); gl.uniformMatrix4fv(M.u.uModel, false, mModel); drawMesh(M, boxMesh);
+    // curated harbour beacons (highlight each candidate; the selected one taller, brighter, pulsing)
+    if (foundMode() && sites.length) {
+      for (var si = 0; si < sites.length; si++) {
+        var s = sites[si], sy = HARBOR_MODELS.heightAt(s.x, s.z), on = si === selSite;
+        var pulse = on ? 1 + 0.12 * Math.sin(clock * 4) : 1;
+        gl.uniform3fv(M.u.uBase, on ? [1.7, 1.35, 0.25] : [0.35, 0.95, 1.25]);
+        composeRYS(mModel, s.x, sy + 11 * pulse, s.z, on ? 1.7 : 1.2, 22 * pulse, on ? 1.7 : 1.2, 0); gl.uniformMatrix4fv(M.u.uModel, false, mModel); drawMesh(M, boxMesh);
+      }
     }
 
     // soft contact shadows
@@ -238,7 +245,7 @@
   }
 
   // ---- founding a harbour (tap the wild coast; rated) ----
-  var pendingFound = null, foundPanel = null, foundLabel = null, foundBtn = null;
+  var foundPanel = null, foundLabel = null, foundBtn = null, siteChips = null;
   function foundMode() { return !founded[biomeId]; }
   // screen px -> world point on the sea-level plane (y=0), via a camera-basis ray (no matrix invert)
   function screenToGround(sx, sy) {
@@ -253,25 +260,30 @@
     var t = -ev[1] / dy; if (t < 0) return null;
     return { x: ev[0] + dx * t, z: ev[2] + dz * t };
   }
-  function scoutAt(sx, sy) {
-    var p = screenToGround(sx, sy); if (!p) return;
-    pendingFound = p; C.txT = p.x; C.tzT = p.z;                                        // centre view on the spot
-    var r = HARBOR_MODELS.rate(p.x, p.z);
-    if (foundLabel) foundLabel.innerHTML = (r.stars ? '★★★★'.slice(0, r.stars) + '☆☆☆☆'.slice(0, 3 - r.stars) + '  ' : '') + r.label;
-    if (foundBtn) foundBtn.disabled = !r.onCoast;
-    if (foundPanel) foundPanel.classList.add('show');
+  // camera azimuth that views a site from offshore (downhill = toward open sea)
+  function seaAz(x, z) { var e = 8, gx = HARBOR_MODELS.heightAt(x + e, z) - HARBOR_MODELS.heightAt(x - e, z), gz = HARBOR_MODELS.heightAt(x, z + e) - HARBOR_MODELS.heightAt(x, z - e); return Math.atan2(-gx, -gz); }
+  function selectSite(i) {
+    if (i < 0 || i >= sites.length) return;
+    selSite = i; var s = sites[i];
+    C.txT = s.x; C.tzT = s.z; C.distT = 132; C.elT = 0.5; C.azT = seaAz(s.x, s.z);     // fly to the chosen harbour
+    if (foundLabel) foundLabel.innerHTML = s.name + '  ' + '★★★'.slice(0, s.stars) + '☆☆☆'.slice(0, 3 - s.stars);
+    if (foundBtn) foundBtn.disabled = false;
+    if (siteChips) for (var k = 0; k < siteChips.children.length; k++) siteChips.children[k].classList.toggle('on', k === i);
+    if (hintEl) hintEl.classList.add('gone');
   }
-  function confirmFound() { if (pendingFound) { foundHere(pendingFound.x, pendingFound.z); pendingFound = null; if (foundPanel) foundPanel.classList.remove('show'); updateFoundUI(); } }
+  // tap on the scene -> select the nearest curated site (if reasonably close)
+  function scoutAt(sx, sy) {
+    var p = screenToGround(sx, sy); if (!p || !sites.length) return;
+    var bi = -1, bd = 1e9; for (var i = 0; i < sites.length; i++) { var d = Math.hypot(sites[i].x - p.x, sites[i].z - p.z); if (d < bd) { bd = d; bi = i; } }
+    if (bi >= 0 && bd < 220) selectSite(bi);
+  }
+  function confirmFound() { if (selSite >= 0 && sites[selSite]) { var s = sites[selSite]; foundHere(s.x, s.z, s.yaw); if (foundPanel) foundPanel.classList.remove('show'); updateFoundUI(); } }
   function updateFoundUI() {
     if (!foundPanel) return;
-    if (foundMode()) { foundPanel.classList.add('show'); if (foundBtn) foundBtn.disabled = !pendingFound; if (!pendingFound && foundLabel) foundLabel.textContent = 'Tap the coast to scout a harbour'; }
-    else { foundPanel.classList.remove('show'); pendingFound = null; }
+    if (foundMode()) { foundPanel.classList.add('show'); if (foundBtn) foundBtn.disabled = selSite < 0; if (selSite < 0 && foundLabel) foundLabel.textContent = 'Choose your harbour'; }
+    else { foundPanel.classList.remove('show'); }
   }
-  function autoFound() { // QA/deterministic: scan the island coast, found the best-rated spot
-    var best = null;
-    for (var x = -500; x <= 500; x += 40) for (var z = -150; z <= 80; z += 12) { var r = HARBOR_MODELS.rate(x, z); if (r.onCoast && (!best || r.score > best.score)) best = { x: x, z: z, score: r.score }; }
-    if (best) foundHere(best.x, best.z);
-  }
+  function autoFound() { var ss = sites.length ? sites : HARBOR_MODELS.sites(); if (ss[0]) foundHere(ss[0].x, ss[0].z, ss[0].yaw); }
 
   // ---- input: PAN-FIRST. 1 finger / left-drag = travel along the coast; pinch / wheel = zoom;
   // 2-finger twist (or right-drag / Shift+drag) = rotate; tap = scout; arrow keys / WASD pan. ----
@@ -388,13 +400,24 @@
   }
 
   // ---- founding prompt UI ----
+  function buildSiteChips() {
+    if (!siteChips) return;
+    siteChips.innerHTML = '';
+    sites.forEach(function (s, i) {
+      var c = document.createElement('button'); c.className = 'site-chip';
+      c.innerHTML = '<span class="sn">' + s.name + '</span><span class="ss">' + '★★★'.slice(0, s.stars) + '</span>';
+      c.addEventListener('click', function () { selectSite(i); });
+      siteChips.appendChild(c);
+    });
+  }
   function buildFoundUI() {
     foundPanel = document.createElement('div'); foundPanel.id = 'foundpanel';
-    foundLabel = document.createElement('span'); foundLabel.id = 'foundlabel'; foundLabel.textContent = 'Tap the coast to scout a harbour';
+    foundLabel = document.createElement('span'); foundLabel.id = 'foundlabel'; foundLabel.textContent = 'Choose your harbour';
+    siteChips = document.createElement('div'); siteChips.id = 'sitechips';
     foundBtn = document.createElement('button'); foundBtn.id = 'foundbtn'; foundBtn.textContent = 'Found village'; foundBtn.disabled = true;
     foundBtn.addEventListener('click', confirmFound);
-    foundPanel.appendChild(foundLabel); foundPanel.appendChild(foundBtn);
-    wrap.appendChild(foundPanel); updateFoundUI();
+    foundPanel.appendChild(foundLabel); foundPanel.appendChild(siteChips); foundPanel.appendChild(foundBtn);
+    wrap.appendChild(foundPanel); buildSiteChips(); updateFoundUI();
   }
 
   function boot() {
@@ -434,10 +457,11 @@
   }
 
   window.__harbor = {
-    state: function () { return { biome: biomeId, era: era, founded: !!founded[biomeId], port: founded[biomeId] || null, worlds: HARBOR_BIOME_ORDER.slice(), unlocked: unlocked.slice(), city: scene.city.length, crane: scene.crane, assets: !!(cityModels && atlasTex), tod: Math.round(tod * 1000) / 1000, cam: { az: +C.az.toFixed(2), el: +C.el.toFixed(2), dist: Math.round(C.dist), tx: Math.round(C.tx), tz: Math.round(C.tz) }, webgl: !!gl, phase: 'world-4.1' }; },
+    state: function () { return { biome: biomeId, era: era, founded: !!founded[biomeId], port: founded[biomeId] || null, sites: sites.length, sel: selSite, worlds: HARBOR_BIOME_ORDER.slice(), unlocked: unlocked.slice(), city: scene.city.length, crane: scene.crane, assets: !!(cityModels && atlasTex), tod: Math.round(tod * 1000) / 1000, cam: { az: +C.az.toFixed(2), el: +C.el.toFixed(2), dist: Math.round(C.dist), tx: Math.round(C.tx), tz: Math.round(C.tz) }, webgl: !!gl, phase: 'world-4.3' }; },
     setBiome: function (id) { if (E) buildBiome(id); }, setTod: function (t) { tod = t % 1; }, pause: function (p) { paused = !!p; },
     setEra: function (n) { era = Math.max(0, n | 0); if (window.Retention) Retention.set(GAME, 'era', era); if (E) buildBiome(biomeId); },
     foundPort: function (x, z) { if (E) foundHere(x, z); }, autoFound: function () { if (E) autoFound(); }, rate: function (x, z) { return HARBOR_MODELS.rate(x, z); },
+    sites: function () { return sites.slice(); }, selectSite: function (i) { if (E) selectSite(i); },
     unlockWorld: function (id) { unlockWorld(id); },
     unlockAll: function () { HARBOR_BIOME_ORDER.forEach(function (id) { if (unlocked.indexOf(id) < 0) unlocked.push(id); }); saveUnlocked(); if (buildSelector._set) buildSelector._set(); }
   };

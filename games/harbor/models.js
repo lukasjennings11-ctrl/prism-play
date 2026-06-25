@@ -231,6 +231,32 @@
     return { shelter: shelter, depth: depth, score: score, stars: stars, label: label, onCoast: onCoast, y: here };
   }
 
+  // curated harbour candidates: scan the island coast, keep the best, well-spaced spots, name them
+  var SH_NAMES = ['Sheltered Cove', 'Calm Bay', 'Hidden Harbour'], DP_NAMES = ['Deep-water Inlet', 'Deepwater Reach', "Trader's Landing"], GN_NAMES = ['Harbour Bay', "Fisher's Bay", 'Anchorage'];
+  function sites() {
+    if (!FIELD) return [];
+    var cand = [], x, z;
+    for (x = -ISLAND.ax * 1.4; x <= ISLAND.ax * 1.4; x += 36)
+      for (z = ISLAND.cz - ISLAND.az * 1.5; z <= ISLAND.cz + ISLAND.az * 1.5; z += 36) {
+        var r = rate(x, z);
+        if (r.onCoast && r.stars >= 1) cand.push({ x: x, z: z, score: r.score, shelter: r.shelter, depth: r.depth, stars: r.stars });
+      }
+    cand.sort(function (a, b) { return b.score - a.score; });
+    var picked = [], i, j, minD = 280;
+    for (var pass = 0; pass < 2 && picked.length < 3; pass++) {        // relax spacing on a 2nd pass if needed
+      var dmin = pass ? 130 : minD;
+      for (i = 0; i < cand.length && picked.length < 3; i++) {
+        var c = cand[i], ok = picked.indexOf(c) < 0;
+        for (j = 0; ok && j < picked.length; j++) if (Math.hypot(c.x - picked[j].x, c.z - picked[j].z) < dmin) ok = false;
+        if (ok) picked.push(c);
+      }
+    }
+    return picked.map(function (c, idx) {
+      var name = c.shelter > 0.6 ? SH_NAMES[idx % 3] : c.depth > 2.2 ? DP_NAMES[idx % 3] : GN_NAMES[idx % 3];
+      return { x: Math.round(c.x), z: Math.round(c.z), yaw: portYaw(c.x, c.z), stars: c.stars, name: name, score: +c.score.toFixed(2) };
+    });
+  }
+
   // ---------------- top-level build ----------------
   function buildStatic(B, biome, rng, era, port) {
     era = era | 0;
@@ -264,5 +290,5 @@
     return scene;
   }
 
-  g.HARBOR_MODELS = { buildStatic: buildStatic, heightAt: heightAt, rate: rate, portYaw: portYaw, CONT: CONT, WORLD: WORLD };
+  g.HARBOR_MODELS = { buildStatic: buildStatic, heightAt: heightAt, rate: rate, sites: sites, portYaw: portYaw, CONT: CONT, WORLD: WORLD };
 })(window);
