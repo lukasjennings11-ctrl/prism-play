@@ -101,4 +101,20 @@ html, body {
 .biome-btn .lock { display: inline-flex; opacity: .85; }
 .biome-btn .lock svg { display: block; }
 
+/* founding prompt */
+#foundpanel {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(46px + env(safe-area-inset-bottom));
+  display: none; align-items: center; gap: 10px; z-index: 7;
+  background: rgba(8,18,24,.74); border: 1px solid rgba(255,255,255,.16); border-radius: 12px;
+  padding: 8px 10px 8px 14px; backdrop-filter: blur(6px); max-width: calc(100% - 24px);
+}
+#foundpanel.show { display: flex; }
+#foundlabel { font-family: 'Outfit', sans-serif; font-size: 13px; font-weight: 700; color: var(--text); letter-spacing: .01em; }
+#foundbtn {
+  font-family: 'Outfit', sans-serif; font-size: 12px; font-weight: 800; letter-spacing: .02em;
+  color: #20140a; background: var(--brass); border: 0; border-radius: 999px; padding: 7px 13px; cursor: pointer; white-space: nowrap;
+}
+#foundbtn:disabled { background: rgba(255,255,255,.18); color: rgba(255,255,255,.55); cursor: default; }
+#foundbtn:not(:disabled):active { transform: scale(.95); }
+
 @media (prefers-reduced-motion: reduce) { #loader .spinner { animation: none; } }
