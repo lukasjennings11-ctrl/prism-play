@@ -26,6 +26,63 @@
     rock:  { top: '#9aa3ad', name: 'Hills' }
   };
 
+  // ---- building catalog (data-driven; tuned across phases) ----
+  // prod: produces `base` units of res every `interval`s (rate = base/interval), scaled
+  //       by adjacency and (for popCost>0 buildings) by labour efficiency.
+  // adj:  per matching neighbour within radius -> mult adds to a multiplier, flat adds units.
+  // pop:  population provided (housing). popCost: labour required to operate.
+  // cap:  adds to storage caps. landmark: gates/symbolises an age.
+  var CATALOG = [
+    // --- Age I — Founding ---
+    { id: 'hut', name: 'Hut', glyph: '🛖', color: '#c98b5a', age: 0, cost: { gold: 10 },
+      place: { on: ['grass', 'sand'] }, pop: 3, prod: { res: 'gold', base: 1, interval: 6 },
+      adj: [{ target: 'hut', kind: 'building', mult: 0.10, radius: 1 }] },
+    { id: 'farm', name: 'Farm', glyph: '🌾', color: '#d9b24a', age: 0, cost: { gold: 12, wood: 5 },
+      place: { on: ['grass'] }, popCost: 1, prod: { res: 'food', base: 2, interval: 4 },
+      adj: [{ target: 'water', kind: 'terrain', flat: 1, radius: 1 },
+            { target: 'farm', kind: 'building', mult: 0.25, radius: 1 }] },
+    { id: 'lumber', name: 'Lumber Camp', glyph: '🪵', color: '#8a6b3a', age: 0, cost: { gold: 14 },
+      place: { on: ['grass'] }, popCost: 1, prod: { res: 'wood', base: 1.5, interval: 5 },
+      adj: [{ target: 'forest', kind: 'terrain', mult: 0.6, radius: 1 }] },
+
+    // --- Age II — Village ---
+    { id: 'house', name: 'House', glyph: '🏠', color: '#d98a4f', age: 1, cost: { wood: 25, gold: 10 },
+      place: { on: ['grass', 'sand'] }, pop: 6, prod: { res: 'gold', base: 2, interval: 6 },
+      adj: [{ target: 'house', kind: 'building', mult: 0.12, radius: 1 }] },
+    { id: 'quarry', name: 'Quarry', glyph: '⛏️', color: '#8b94a0', age: 1, cost: { wood: 20, gold: 15 },
+      place: { on: ['grass', 'rock'], near: ['rock'] }, popCost: 2, prod: { res: 'stone', base: 1.5, interval: 6 },
+      adj: [{ target: 'rock', kind: 'terrain', mult: 0.5, radius: 1 }] },
+    { id: 'market', name: 'Market', glyph: '🪙', color: '#e0b15a', age: 1, cost: { wood: 30, stone: 10 },
+      place: { on: ['grass'] }, popCost: 1, prod: { res: 'gold', base: 3, interval: 5 },
+      adj: [{ target: 'house', kind: 'building', mult: 0.20, radius: 2 }] },
+    { id: 'library', name: 'Library', glyph: '📜', color: '#b06fae', age: 1, cost: { wood: 30, stone: 15 },
+      place: { on: ['grass'] }, popCost: 1, prod: { res: 'know', base: 1, interval: 7 },
+      adj: [{ target: 'house', kind: 'building', mult: 0.15, radius: 2 }] },
+    { id: 'granary', name: 'Granary', glyph: '🏚️', color: '#bfa46a', age: 1, cost: { wood: 25, stone: 10 },
+      place: { on: ['grass'] }, cap: { food: 300, wood: 200 } },
+
+    // --- Age III — Roman City ---
+    { id: 'insula', name: 'Insula', glyph: '🏘️', color: '#cf7f44', age: 2, cost: { stone: 40, gold: 20 },
+      place: { on: ['grass', 'sand'] }, pop: 12, prod: { res: 'gold', base: 4, interval: 6 },
+      adj: [{ target: 'insula', kind: 'building', mult: 0.10, radius: 1 }] },
+    { id: 'aqueduct', name: 'Aqueduct', glyph: '💧', color: '#9fc7d8', age: 2, cost: { stone: 60, gold: 30 },
+      place: { on: ['grass'] }, cap: { food: 400, know: 200 } },
+    { id: 'forum', name: 'Forum', glyph: '🏛️', color: '#e8d6a0', age: 2, cost: { stone: 80, wood: 40, gold: 50 },
+      place: { on: ['grass'] }, landmark: true, prod: { res: 'know', base: 3, interval: 6 },
+      adj: [{ target: 'house', kind: 'building', mult: 0.10, radius: 2 },
+            { target: 'insula', kind: 'building', mult: 0.10, radius: 2 }] },
+    { id: 'colosseum', name: 'Colosseum', glyph: '🏟️', color: '#d8c08a', age: 2, cost: { stone: 120, gold: 80 },
+      place: { on: ['grass'] }, landmark: true, prod: { res: 'gold', base: 6, interval: 5 },
+      adj: [{ target: 'house', kind: 'building', mult: 0.08, radius: 3 },
+            { target: 'insula', kind: 'building', mult: 0.08, radius: 3 }] }
+  ];
+  var DEF = {};
+  for (var _i = 0; _i < CATALOG.length; _i++) DEF[CATALOG[_i].id] = CATALOG[_i];
+  function defOf(id) { return DEF[id]; }
+
+  var RES_KEYS = ['food', 'wood', 'stone', 'gold', 'know'];
+  var CAP_BASE = { food: 200, wood: 200, stone: 200, gold: 500, know: 100 };
+
   // ---- DOM ----
   var canvas = document.getElementById('game'), ctx = canvas.getContext('2d');
   var wrap = document.querySelector('.board-wrap');
@@ -51,9 +108,8 @@
       seed: sd,
       age: 0,                       // 0-indexed age (Age I = 0)
       tiles: genTiles(sd),
-      res: { food: 0, wood: 0, stone: 0, gold: 50, know: 0 },
+      res: { food: 20, wood: 20, stone: 0, gold: 50, know: 0 },
       cap: { food: 200, wood: 200, stone: 200, gold: 500, know: 100 },
-      pop: 0, popCap: 0,
       lastSeen: Date.now(),
       quests: [], questIdx: 0,
       created: Date.now()
@@ -130,6 +186,151 @@
   }
   function isBuildable(t) {
     return t && isUnlocked(t) && t.type !== 'water' && !t.b;
+  }
+
+  // ---------- economy engine ----------
+  var pop = 0, popUsed = 0, eff = 1;   // derived (recomputed; not serialised)
+
+  // count neighbours of a tile matching a target terrain/building within chebyshev radius
+  function countNbr(t, target, kind, radius) {
+    var n = 0;
+    for (var di = -radius; di <= radius; di++) for (var dj = -radius; dj <= radius; dj++) {
+      if (di === 0 && dj === 0) continue;
+      var o = tileAt(t.gx + di, t.gy + dj);
+      if (!o) continue;
+      if (kind === 'terrain') {
+        if (target === 'forest') { if (o.forest) n++; }
+        else if (o.type === target) n++;
+      } else { // building
+        if (o.b && o.b.id === target) n++;
+      }
+    }
+    return n;
+  }
+
+  // adjacency -> { mult, flat } for a building on tile t
+  function adjStats(t, def) {
+    var mult = 1, flat = 0, rules = def.adj || [];
+    for (var i = 0; i < rules.length; i++) {
+      var r = rules[i], c = countNbr(t, r.target, r.kind, r.radius || 1);
+      if (!c) continue;
+      if (r.mult) mult += r.mult * c;
+      if (r.flat) flat += r.flat * c;
+    }
+    return { mult: mult, flat: flat };
+  }
+
+  // production rate (units/sec) of the building on tile t for its resource
+  function rateOf(t) {
+    var def = t.b && defOf(t.b.id);
+    if (!def || !def.prod) return 0;
+    var lvl = t.b.level || 1;
+    var a = adjStats(t, def);
+    var perInterval = (def.prod.base * a.mult + a.flat) * lvl;   // level scales output
+    var rate = perInterval / def.prod.interval;
+    if (def.popCost > 0) rate *= eff;                            // labour-limited
+    return rate;
+  }
+
+  function eachBuilding(fn) {
+    for (var i = 0; i < GRID; i++) for (var j = 0; j < GRID; j++) {
+      var t = S.tiles[i][j]; if (t.b) fn(t, defOf(t.b.id));
+    }
+  }
+
+  // recompute population, labour efficiency, and storage caps from placed buildings
+  function recompute() {
+    pop = 0; popUsed = 0;
+    var cap = { food: CAP_BASE.food, wood: CAP_BASE.wood, stone: CAP_BASE.stone, gold: CAP_BASE.gold, know: CAP_BASE.know };
+    eachBuilding(function (t, def) {
+      var lvl = t.b.level || 1;
+      if (def.pop) pop += def.pop * lvl;
+      if (def.popCost) popUsed += def.popCost;
+      if (def.cap) for (var k in def.cap) if (cap[k] != null) cap[k] += def.cap[k] * lvl;
+    });
+    eff = popUsed > 0 ? clamp(pop / popUsed, 0, 1) : 1;
+    S.cap = cap;
+    // clamp stored resources to (possibly lowered) caps
+    for (var r = 0; r < RES_KEYS.length; r++) {
+      var key = RES_KEYS[r];
+      if (S.res[key] > cap[key]) S.res[key] = cap[key];
+    }
+  }
+
+  function affordable(def) {
+    var c = def.cost || {};
+    for (var k in c) if ((S.res[k] || 0) < c[k]) return false;
+    return true;
+  }
+  function nearOk(t, def) {
+    if (!def.place || !def.place.near) return true;
+    for (var i = 0; i < def.place.near.length; i++) {
+      if (countNbr(t, def.place.near[i], 'terrain', 1) > 0) return true;
+    }
+    return false;
+  }
+  function placeOk(t, def) {
+    return def.place && def.place.on && def.place.on.indexOf(t.type) >= 0;
+  }
+  // why a building can't be placed here (null === ok)
+  function buildBlock(t, id) {
+    var def = defOf(id);
+    if (!def) return 'unknown';
+    if (!t) return 'no tile';
+    if (def.age > S.age) return 'locked age';
+    if (!isUnlocked(t)) return 'locked tile';
+    if (t.b) return 'occupied';
+    if (t.type === 'water') return 'water';
+    if (!placeOk(t, def)) return 'terrain';
+    if (!nearOk(t, def)) return 'needs ' + def.place.near.join('/');
+    if (!affordable(def)) return 'cost';
+    return null;
+  }
+  function canBuild(gx, gy, id) { return buildBlock(tileAt(gx, gy), id) === null; }
+
+  function build(gx, gy, id) {
+    var t = tileAt(gx, gy), def = defOf(id);
+    if (buildBlock(t, id) !== null) return false;
+    var c = def.cost || {};
+    for (var k in c) S.res[k] -= c[k];
+    t.b = { id: id, level: 1 };
+    recompute(); save();
+    return true;
+  }
+
+  // accrue production for `sec` seconds into the store, clamped to caps. Returns gains.
+  function accrue(sec) {
+    if (!(sec > 0)) return {};
+    var gained = {};
+    eachBuilding(function (t, def) {
+      if (!def.prod) return;
+      var r = rateOf(t); if (r <= 0) return;
+      gained[def.prod.res] = (gained[def.prod.res] || 0) + r * sec;
+    });
+    for (var k in gained) S.res[k] = clamp((S.res[k] || 0) + gained[k], 0, S.cap[k]);
+    return gained;
+  }
+
+  // total production rate per resource (units/sec) — for HUD/preview
+  function ratesPerSec() {
+    var out = { food: 0, wood: 0, stone: 0, gold: 0, know: 0 };
+    eachBuilding(function (t, def) { if (def.prod) out[def.prod.res] += rateOf(t); });
+    return out;
+  }
+
+  // preview for the build menu / ghost: cost, resulting rate, blocker
+  function buildPreview(gx, gy, id) {
+    var t = tileAt(gx, gy), def = defOf(id);
+    if (!def) return null;
+    var block = buildBlock(t, id);
+    var rate = 0;
+    if (def.prod && t && t.type !== 'water') {
+      var a = adjStats(t, def);
+      var perInterval = def.prod.base * a.mult + a.flat;
+      rate = perInterval / def.prod.interval;  // unscaled by eff (preview shows potential)
+    }
+    return { ok: block === null, block: block, cost: def.cost || {}, prod: def.prod || null,
+             rate: rate, pop: def.pop || 0, popCost: def.popCost || 0 };
   }
 
   // ---------- layout / iso projection ----------
@@ -332,7 +533,7 @@
   function save() { if (S) { S.lastSeen = Date.now(); Retention.set(GAME, 'save', S); } }
   function load() {
     var raw = Retention.get(GAME, 'save', null);
-    if (raw && raw.tiles && raw.tiles.length === GRID) { S = raw; seed = raw.seed; return true; }
+    if (raw && raw.tiles && raw.tiles.length === GRID) { S = raw; seed = raw.seed; recompute(); return true; }
     return false;
   }
 
@@ -344,6 +545,7 @@
     seed = (sd == null) ? (Date.now() >>> 0) : (sd >>> 0);
     S = defaultState(seed);
     sel = null;
+    recompute();
     layout();
     save();
   }
@@ -389,7 +591,7 @@
   // ---------- loop ----------
   function update(dt) {
     particles.update(dt); popups.update(dt);
-    // economy tick lands in Phase 2
+    if (S) accrue(dt);   // live production into the store (capped)
   }
 
   // ---------- boot ----------
@@ -427,14 +629,24 @@
     state: function () {
       return {
         seed: S.seed, age: S.age, res: JSON.parse(JSON.stringify(S.res)),
-        cap: JSON.parse(JSON.stringify(S.cap)), pop: S.pop, popCap: S.popCap,
-        unlockR: unlockR(),
+        cap: JSON.parse(JSON.stringify(S.cap)), pop: pop, popUsed: popUsed, eff: Math.round(eff * 100) / 100,
+        rates: ratesPerSec(), unlockR: unlockR(),
         buildable: countBuildable(), buildings: countBuildings()
       };
     },
     tiles: function () { return S.tiles; },
     tile: function (gx, gy) { return tileAt(gx, gy); },
     isBuildable: function (gx, gy) { return isBuildable(tileAt(gx, gy)); },
+    defs: function () { return CATALOG.map(function (d) { return d.id; }); },
+    canBuild: canBuild,
+    buildPreview: buildPreview,
+    build: build,
+    rateOf: function (gx, gy) { return rateOf(tileAt(gx, gy)); },
+    rates: ratesPerSec,
+    accrue: function (sec) { var g = accrue(sec); recompute(); return g; },
+    recompute: recompute,
+    setRes: function (o) { for (var k in o) S.res[k] = o[k]; recompute(); },  // test helper
+    setAge: function (a) { S.age = a; layout(); },                            // test helper
     pick: function (gx, gy) { var t = tileAt(gx, gy); if (t) openPanel(t); return t; },
     save: save, load: load,
     _S: function () { return S; }
