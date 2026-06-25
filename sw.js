@@ -1,10 +1,11 @@
-const CACHE = 'prismplay-v4';
+const CACHE = 'prismplay-v5';
 const PRECACHE = [
   './',
   'index.html',
   'manifest.json',
   'icon-192.png',
   'icon-512.png',
+  'games/harbor/index.html',
   'games/polis/index.html',
   'games/prism/index.html',
   'games/fuse/index.html',
