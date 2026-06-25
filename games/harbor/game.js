@@ -1,515 +1,304 @@
-/* HARBOR — a living side-on port (Phase 1: the LOOK SLICE).
- *
- * Pure procedural canvas: parallax sky + day/night cycle, animated water (waves,
- * sun/moon glitter, reflections), a docked container ship, a working gantry crane
- * that cycles containers, warehouses, a lighthouse, and a city skyline whose
- * windows light up at dusk. Drag to pan. No gameplay yet — this exists to set the
- * visual bar before the systems are built on top.
- *
- * URL params for screenshots: ?tod=0.78 (time of day 0..1), ?pan=0.5, ?still
- * Shared: juice.js, retention.js, portal.js, progression.js, stage.js.
+/* HARBOR — Phase 1: the 3D LOOK SLICE (WebGL2).
+ * A detailed, semi-realistic port at a tilted 3/4 angle: reflective animated water,
+ * a docked container ship, a working gantry crane casting real shadows, warehouses,
+ * a city skyline, a lighthouse, day/night sun. Free orbit + zoom camera. No gameplay
+ * yet — this sets the visual bar. Rendering is guarded so the sim/hook still load
+ * headlessly (Node) without WebGL.
  */
 (function () {
   'use strict';
-
   var GAME = 'harbor';
-  var clamp = Juice.clamp, lerp = Juice.lerp, TAU = Math.PI * 2;
+  var mat4 = (window.HGL && HGL.mat4);
 
-  // ---- DOM ----
-  var canvas = document.getElementById('game'), ctx = canvas.getContext('2d');
-  var wrap = document.querySelector('.board-wrap');
+  var canvas = document.getElementById('game');
   var loader = document.getElementById('loader');
   var clockEl = document.getElementById('clock');
   var hintEl = document.getElementById('hint');
+  var wrap = document.querySelector('.board-wrap');
 
-  // ---- view ----
+  var gl = null, E = null;
+  try { gl = canvas.getContext('webgl2', { antialias: true, alpha: false }); } catch (e) {}
+
+  // ---- camera (orbit) ----
+  var cam = { az: 2.42, el: 0.56, dist: 122, tx: 0, ty: 6, tz: 4 };
   var CW = 0, CH = 0, DPR = 1;
-  var WORLDW = 1700;                 // logical width of the slice world
-  var panX = 0, panTarget = 0, HERO_X = 430, userPanned = false;
-  var tod = 0.30;                    // time of day 0..1 (0=midnight, .5=noon)
-  var TOD_SPEED = 1 / 130;           // full day per ~130s
-  var paused = false, clock = 0;
+  var tod = 0.66, todSpeed = 1 / 150, paused = false, clock = 0;
 
-  // scene layout (recomputed on layout)
-  var horizonY = 0, quayY = 0, scale = 1;
-
-  function layout() {
+  function resize() {
     var bw = wrap.clientWidth || 360, bh = wrap.clientHeight || 560;
     CW = Math.max(240, bw); CH = Math.max(320, bh);
-    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    DPR = Math.min(window.devicePixelRatio || 1, 1.75);
     canvas.width = Math.round(CW * DPR); canvas.height = Math.round(CH * DPR);
     canvas.style.width = CW + 'px'; canvas.style.height = CH + 'px';
-    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-    horizonY = CH * 0.42;
-    quayY = CH * 0.66;               // waterline / top of the dock
-    scale = clamp(CH / 640, 0.7, 1.6);
-    var maxPan = Math.max(0, WORLDW - CW);
-    if (!userPanned) { panX = panTarget = clamp(HERO_X - CW / 2, 0, maxPan); }   // frame the hero berth on load
-    panX = clamp(panX, 0, maxPan);
-    panTarget = clamp(panTarget, 0, maxPan);
   }
 
-  // ---- colour helpers ----
-  function hx(h) { var n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
-  function mix(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
-  function rgb(c, a) { return 'rgba(' + (c[0] | 0) + ',' + (c[1] | 0) + ',' + (c[2] | 0) + ',' + (a == null ? 1 : a) + ')'; }
-
-  // day/night keyframes: t, skyTop, skyBottom(horizon), darkness(0 day..1 night)
-  var SKY = [
-    { t: 0.00, top: '#0a1330', bot: '#152648', dark: 1.0 },
-    { t: 0.20, top: '#243a6e', bot: '#7d5a8c', dark: 0.75 },
-    { t: 0.26, top: '#5a86c4', bot: '#f0a563', dark: 0.25 },
-    { t: 0.40, top: '#5fa6e6', bot: '#bfe6f5', dark: 0.0 },
-    { t: 0.60, top: '#5fa6e6', bot: '#cfeaf6', dark: 0.0 },
-    { t: 0.72, top: '#3f5fa0', bot: '#ffb066', dark: 0.25 },
-    { t: 0.80, top: '#243a6e', bot: '#c0604e', dark: 0.7 },
-    { t: 0.90, top: '#101c44', bot: '#1f2a55', dark: 0.95 },
-    { t: 1.00, top: '#0a1330', bot: '#152648', dark: 1.0 }
-  ];
-  function skyAt(t) {
-    for (var i = 0; i < SKY.length - 1; i++) {
-      if (t >= SKY[i].t && t <= SKY[i + 1].t) {
-        var f = (t - SKY[i].t) / (SKY[i + 1].t - SKY[i].t || 1);
-        return {
-          top: mix(hx(SKY[i].top), hx(SKY[i + 1].top), f),
-          bot: mix(hx(SKY[i].bot), hx(SKY[i + 1].bot), f),
-          dark: lerp(SKY[i].dark, SKY[i + 1].dark, f)
-        };
-      }
+  // ---- procedural detail texture (concrete/steel grit) ----
+  function gritTexture() {
+    var c = document.createElement('canvas'); c.width = c.height = 256; var x = c.getContext('2d');
+    x.fillStyle = '#808080'; x.fillRect(0, 0, 256, 256);
+    for (var i = 0; i < 9000; i++) {
+      var v = 110 + Math.random() * 90 | 0; x.fillStyle = 'rgb(' + v + ',' + v + ',' + v + ')';
+      x.fillRect(Math.random() * 256, Math.random() * 256, 1.5, 1.5);
     }
-    return { top: hx(SKY[0].top), bot: hx(SKY[0].bot), dark: SKY[0].dark };
+    x.strokeStyle = 'rgba(60,60,60,.25)'; x.lineWidth = 1;
+    for (i = 0; i < 8; i++) { var y = i * 32; x.beginPath(); x.moveTo(0, y); x.lineTo(256, y); x.stroke(); }
+    return c;
   }
 
-  // ---- deterministic noise for stars/glitter (stable per frame seed) ----
-  function rnd(n) { var x = Math.sin(n * 127.1) * 43758.5453; return x - Math.floor(x); }
+  // ---- scene ----
+  var boxMesh, waterMesh, gritTex;
+  var CONT = [[0.86, 0.28, 0.22], [0.18, 0.55, 0.74], [0.95, 0.72, 0.2], [0.24, 0.66, 0.42], [0.58, 0.36, 0.7], [0.9, 0.48, 0.58]];
+  var statics = [];           // {t,s,ry,col,rough,emiss,tex,shadow}
+  function add(t, s, col, o) { o = o || {}; statics.push({ t: t, s: s, ry: o.ry || 0, col: col, rough: o.rough == null ? 0.8 : o.rough, emiss: o.emiss || [0, 0, 0], tex: o.tex ? 1 : 0, shadow: o.shadow !== false }); }
 
-  // ===================== RENDER =====================
-  var sky;   // current sky sample
-
-  function drawSky() {
-    var g = ctx.createLinearGradient(0, 0, 0, quayY);
-    g.addColorStop(0, rgb(sky.top)); g.addColorStop(1, rgb(sky.bot));
-    ctx.fillStyle = g; ctx.fillRect(0, 0, CW, quayY + 2);
-    // stars
-    if (sky.dark > 0.2) {
-      ctx.fillStyle = rgb([255, 255, 255], (sky.dark - 0.2) * 0.9);
-      for (var i = 0; i < 70; i++) {
-        var sx = rnd(i * 1.3) * CW, sy = rnd(i * 2.7) * horizonY;
-        var tw = 0.5 + 0.5 * Math.sin(clock * 2 + i);
-        ctx.globalAlpha = (sky.dark - 0.2) * (0.4 + 0.6 * tw);
-        ctx.fillRect(sx, sy, 1.6, 1.6);
-      }
-      ctx.globalAlpha = 1;
-    }
-  }
-
-  // sun/moon — screen-space arc; returns {x,y,sun}
-  function lightSource() {
-    // sun rises ~0.22, sets ~0.78
-    var sunUp = tod > 0.22 && tod < 0.78;
-    var f = sunUp ? (tod - 0.22) / 0.56 : ((tod < 0.22 ? tod + 1 : tod) - 0.78) / 0.44;
-    var x = f * CW;
-    var y = horizonY - Math.sin(clamp(f, 0, 1) * Math.PI) * (horizonY * 0.78) + horizonY * 0.06;
-    return { x: x, y: y, sun: sunUp };
-  }
-  function drawSunMoon(ls) {
-    ctx.save();
-    if (ls.sun) {
-      var r = 26 * scale;
-      var g = ctx.createRadialGradient(ls.x, ls.y, 0, ls.x, ls.y, r * 4);
-      g.addColorStop(0, 'rgba(255,240,200,.6)'); g.addColorStop(1, 'rgba(255,240,200,0)');
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(ls.x, ls.y, r * 4, 0, TAU); ctx.fill();
-      ctx.fillStyle = '#fff4d6'; ctx.beginPath(); ctx.arc(ls.x, ls.y, r, 0, TAU); ctx.fill();
-    } else {
-      var mr = 18 * scale;
-      ctx.fillStyle = 'rgba(225,235,255,' + (0.4 + sky.dark * 0.6) + ')';
-      ctx.beginPath(); ctx.arc(ls.x, ls.y, mr, 0, TAU); ctx.fill();
-      ctx.fillStyle = rgb(sky.top, 0.5);
-      ctx.beginPath(); ctx.arc(ls.x + mr * 0.4, ls.y - mr * 0.35, mr * 0.85, 0, TAU); ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  function drawClouds() {
-    var n = 5, baseA = 0.18 + (1 - sky.dark) * 0.22;
-    for (var i = 0; i < n; i++) {
-      var cx = ((clock * (4 + i * 2) + i * 480) % (CW + 300)) - 150;
-      var cy = horizonY * (0.22 + 0.13 * i);
-      var w = (120 + i * 40) * scale, h = w * 0.34;
-      ctx.fillStyle = rgb(mix(sky.top, [255, 255, 255], 0.55), baseA);
-      blob(cx, cy, w, h);
-    }
-  }
-  function blob(x, y, w, h) {
-    ctx.beginPath();
-    ctx.ellipse(x, y, w * 0.5, h * 0.5, 0, 0, TAU);
-    ctx.ellipse(x - w * 0.28, y + h * 0.1, w * 0.3, h * 0.4, 0, 0, TAU);
-    ctx.ellipse(x + w * 0.3, y + h * 0.08, w * 0.32, h * 0.42, 0, 0, TAU);
-    ctx.fill();
-  }
-
-  // distant city skyline (parallax 0.35), bases at quayY
-  var SKYLINE = [];
-  function buildSkyline() {
-    SKYLINE = [];
-    var x = 0;
-    while (x < WORLDW) {
-      var w = 40 + rnd(x) * 70, h = 60 + rnd(x * 3.1) * 190;
-      SKYLINE.push({ x: x, w: w, h: h, tone: 0.3 + rnd(x * 1.7) * 0.4 });
-      x += w + 6 + rnd(x * 2.3) * 20;
-    }
-  }
-  function drawSkyline() {
-    var par = 0.4, baseCol = mix(sky.bot, sky.top, 0.5);
-    for (var i = 0; i < SKYLINE.length; i++) {
-      var b = SKYLINE[i], sx = b.x * par - panX * par;
-      if (sx + b.w < -20 || sx > CW + 20) continue;
-      var col = mix(baseCol, [20, 30, 50], 0.5 + b.tone * 0.3);
-      // haze: fade with darkness less
-      ctx.fillStyle = rgb(col, 0.9);
-      ctx.fillRect(sx, quayY - b.h * scale, b.w * scale, b.h * scale);
-      // windows lit at night
-      if (sky.dark > 0.25) {
-        for (var wy = quayY - b.h * scale + 10; wy < quayY - 8; wy += 12 * scale) {
-          for (var wx = sx + 5; wx < sx + b.w * scale - 5; wx += 10 * scale) {
-            if (rnd(wx * 0.7 + wy * 1.3 + i) > 0.45) {
-              ctx.fillStyle = rgb([255, 214, 130], (sky.dark - 0.25) * (0.5 + 0.5 * rnd(wx + wy)));
-              ctx.fillRect(wx, wy, 4 * scale, 5 * scale);
-            }
-          }
-        }
-      }
-    }
-  }
-
-  // ---- water ----
-  function drawSea(ls) {
-    var topC = mix(sky.bot, [10, 40, 60], 0.45), deepC = mix([8, 24, 38], sky.top, 0.15);
-    var g = ctx.createLinearGradient(0, quayY, 0, CH);
-    g.addColorStop(0, rgb(topC)); g.addColorStop(1, rgb(deepC));
-    ctx.fillStyle = g; ctx.fillRect(0, quayY, CW, CH - quayY);
-
-    // sun/moon glitter column
-    var gx = ls.x;
-    var glow = ls.sun ? 'rgba(255,240,200,' : 'rgba(220,235,255,';
-    for (var i = 0; i < 90; i++) {
-      var yy = quayY + rnd(i * 3.3) * (CH - quayY);
-      var spread = (yy - quayY) / (CH - quayY) * 70 * scale + 6;
-      var xx = gx + (rnd(i * 1.9 + Math.floor(clock * 3)) - 0.5) * spread * 2;
-      var fl = 0.3 + 0.7 * Math.abs(Math.sin(clock * 4 + i));
-      ctx.fillStyle = glow + (fl * (ls.sun ? 0.5 : 0.3 + sky.dark * 0.3)) + ')';
-      ctx.fillRect(xx, yy, 7 * scale, 1.5 * scale);
-    }
-    // soft reflection bloom of the light source on the water
-    var rg = ctx.createRadialGradient(gx, quayY + 6, 4, gx, quayY + 6, 150 * scale);
-    rg.addColorStop(0, ls.sun ? 'rgba(255,235,180,.20)' : 'rgba(200,220,255,' + (0.08 + sky.dark * 0.12) + ')');
-    rg.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = rg; ctx.fillRect(0, quayY, CW, CH - quayY);
-    // rolling wave crests
-    for (var k = 0; k < 5; k++) {
-      var yBase = quayY + (CH - quayY) * (0.12 + k * 0.2);
-      var amp = (2 + k * 1.4) * scale, len = 90 + k * 50, spd = (8 + k * 6);
-      ctx.strokeStyle = rgb(mix(topC, [255, 255, 255], 0.5 - k * 0.06), 0.10 + (1 - sky.dark) * 0.05);
-      ctx.lineWidth = 1.4 * scale; ctx.beginPath();
-      for (var x = 0; x <= CW; x += 8) {
-        var yy2 = yBase + Math.sin((x + clock * spd * 6 + panX * 0.3) / len) * amp;
-        if (x === 0) ctx.moveTo(x, yy2); else ctx.lineTo(x, yy2);
-      }
-      ctx.stroke();
-    }
-  }
-
-  function worldToScreen(x) { return x - panX; }
-
-  // vertical wavy reflection of a solid color band under an object
-  function reflect(x, w, col, alpha) {
-    var grd = ctx.createLinearGradient(0, quayY, 0, quayY + 40 * scale);
-    grd.addColorStop(0, rgb(col, alpha)); grd.addColorStop(1, rgb(col, 0));
-    ctx.fillStyle = grd;
-    for (var rx = x; rx < x + w; rx += 3) {
-      var off = Math.sin((rx + clock * 30) / 18) * 2;
-      ctx.fillRect(rx + off, quayY, 3, 36 * scale);
-    }
-  }
-
-  // ---- quay (dock front wall + deck) ----
-  function drawQuay() {
-    var sx = worldToScreen(0), w = WORLDW;
-    // deck top
-    ctx.fillStyle = '#5b6470'; ctx.fillRect(sx, quayY - 4, w, 6);
-    // front wall
-    var g = ctx.createLinearGradient(0, quayY, 0, quayY + 26 * scale);
-    g.addColorStop(0, '#3a434e'); g.addColorStop(1, '#222a33');
-    ctx.fillStyle = g; ctx.fillRect(sx, quayY, w, 26 * scale);
+  function buildScene() {
+    statics = [];
+    // ground / land behind the quay
+    add([0, -0.5, 70], [260, 1, 120], [0.30, 0.34, 0.26], { rough: 1, shadow: false });
+    // quay platform
+    add([0, 0, 15], [150, 2.2, 22], [0.62, 0.62, 0.64], { rough: 0.9, tex: 1 });
+    add([0, 0, 4.4], [150, 1.6, 1.2], [0.5, 0.5, 0.52], { rough: 0.9 }); // quay lip
     // bollards
-    ctx.fillStyle = '#2c333c';
-    for (var bx = 40; bx < WORLDW; bx += 120) {
-      var px = worldToScreen(bx);
-      if (px < -10 || px > CW + 10) continue;
-      ctx.fillRect(px, quayY - 10 * scale, 6 * scale, 10 * scale);
-    }
-  }
+    for (var bx = -60; bx <= 60; bx += 12) add([bx, 1.6, 5], [0.7, 1.2, 0.7], [0.18, 0.19, 0.2], { rough: 0.7 });
 
-  // ---- lighthouse ----
-  function drawLighthouse(wx) {
-    var x = worldToScreen(wx); if (x < -80 || x > CW + 80) return;
-    var baseY = quayY, h = 120 * scale, w = 26 * scale;
-    // rock
-    ctx.fillStyle = '#2e3640'; ctx.beginPath();
-    ctx.moveTo(x - w, baseY); ctx.lineTo(x + w, baseY); ctx.lineTo(x + w * 0.7, baseY - 10 * scale); ctx.lineTo(x - w * 0.7, baseY - 10 * scale); ctx.closePath(); ctx.fill();
-    // tower (tapered, striped)
-    var topW = w * 0.5;
-    for (var s = 0; s < 5; s++) {
-      var y0 = baseY - 10 * scale - (h / 5) * s, y1 = baseY - 10 * scale - (h / 5) * (s + 1);
-      var w0 = lerp(w, topW, s / 5), w1 = lerp(w, topW, (s + 1) / 5);
-      ctx.fillStyle = s % 2 ? '#d8dde2' : '#c8443a';
-      ctx.beginPath(); ctx.moveTo(x - w0, y0); ctx.lineTo(x + w0, y0); ctx.lineTo(x + w1, y1); ctx.lineTo(x - w1, y1); ctx.closePath(); ctx.fill();
+    // warehouses on the quay
+    var wcol = [[0.55, 0.58, 0.62], [0.6, 0.5, 0.46], [0.5, 0.54, 0.58]];
+    for (var i = 0; i < 5; i++) {
+      var wx = -52 + i * 26, w = 18, d = 13, h = 9 + (i % 2) * 2;
+      add([wx, 2.2, 24], [w, h, d], wcol[i % 3], { tex: 1, rough: 0.85 });
+      add([wx, 2.2 + h, 24], [w + 1.2, 1.4, d + 1.2], [0.3, 0.32, 0.34], { rough: 0.9 }); // roof cap
     }
-    var lampY = baseY - 10 * scale - h;
-    // lamp housing
-    ctx.fillStyle = '#1b2127'; ctx.fillRect(x - topW, lampY, topW * 2, 14 * scale);
-    // beam (sweeps)
-    var beam = (Math.sin(clock * 1.1) * 0.5 + 0.5);
-    var ba = (0.12 + sky.dark * 0.5);
-    ctx.save(); ctx.globalCompositeOperation = 'lighter';
-    var ang = -0.5 + beam * 1.0;
-    var bg = ctx.createLinearGradient(x, lampY, x + Math.cos(ang) * 240, lampY + Math.sin(ang) * 240);
-    bg.addColorStop(0, 'rgba(255,245,200,' + ba + ')'); bg.addColorStop(1, 'rgba(255,245,200,0)');
-    ctx.fillStyle = bg;
-    ctx.beginPath(); ctx.moveTo(x, lampY + 6 * scale);
-    ctx.lineTo(x + Math.cos(ang - 0.12) * 260, lampY + Math.sin(ang - 0.12) * 260);
-    ctx.lineTo(x + Math.cos(ang + 0.12) * 260, lampY + Math.sin(ang + 0.12) * 260);
-    ctx.closePath(); ctx.fill();
-    ctx.restore();
-    // lamp glow
-    ctx.fillStyle = 'rgba(255,240,190,' + (0.5 + sky.dark * 0.5) + ')';
-    ctx.beginPath(); ctx.arc(x, lampY + 7 * scale, 4 * scale, 0, TAU); ctx.fill();
-  }
+    // city skyline behind
+    for (i = 0; i < 22; i++) {
+      var cx = -80 + i * 7.6 + (i * 53 % 5), ch = 9 + (i * 37 % 22), cd = 9;
+      var g = 0.4 + (i * 29 % 30) / 120;
+      add([cx, 2, 52 + (i * 17 % 16)], [6.4, ch, cd], [g * 0.7, g * 0.75, g * 0.85], { rough: 0.9, tex: 1 });
+    }
+    // lighthouse at the western mole
+    var lx = -70;
+    add([lx, 0, 6], [9, 2.5, 9], [0.3, 0.31, 0.33]);                 // base rock
+    for (i = 0; i < 5; i++) add([lx, 2.5 + i * 4, 6], [5 - i * 0.5, 4, 5 - i * 0.5], i % 2 ? [0.85, 0.85, 0.87] : [0.7, 0.2, 0.17]);
+    add([lx, 22.5, 6], [3.2, 2.6, 3.2], [0.15, 0.16, 0.18]);          // lamp housing
+    add([lx, 23, 6], [1.6, 1.6, 1.6], [0, 0, 0], { emiss: [1.2, 1.0, 0.5], shadow: false });
 
-  // ---- warehouse ----
-  function drawWarehouse(wx, w, col) {
-    var x = worldToScreen(wx); if (x + w < -20 || x > CW + 20) return;
-    var h = 70 * scale; w *= scale;
-    var bodyY = quayY - h;
-    // body
-    var g = ctx.createLinearGradient(x, bodyY, x, quayY);
-    g.addColorStop(0, rgb(mix(hx(col), [255, 255, 255], 0.12 * (1 - sky.dark)))); g.addColorStop(1, rgb(hx(col)));
-    ctx.fillStyle = g; ctx.fillRect(x, bodyY, w, h);
-    // roof
-    ctx.fillStyle = rgb(mix(hx(col), [0, 0, 0], 0.45));
-    ctx.beginPath(); ctx.moveTo(x - 4, bodyY); ctx.lineTo(x + w + 4, bodyY); ctx.lineTo(x + w - 6, bodyY - 12 * scale); ctx.lineTo(x + 6, bodyY - 12 * scale); ctx.closePath(); ctx.fill();
-    // roller doors
-    ctx.fillStyle = rgb(mix(hx(col), [0, 0, 0], 0.3));
-    var dn = Math.max(1, Math.floor(w / (28 * scale)));
-    for (var d = 0; d < dn; d++) {
-      var dx = x + 8 + d * (w - 16) / dn;
-      ctx.fillRect(dx, quayY - 34 * scale, (w - 16) / dn - 6, 34 * scale);
-    }
-    // night wall light
-    if (sky.dark > 0.3) {
-      ctx.fillStyle = 'rgba(255,220,150,' + (sky.dark - 0.3) * 0.5 + ')';
-      ctx.beginPath(); ctx.arc(x + 6, bodyY + 8 * scale, 8 * scale, 0, TAU); ctx.fill();
-    }
-  }
-
-  // ---- container ship (docked) ----
-  var CONT_COLS = ['#c0473a', '#2f7fb0', '#d99a32', '#3a9d6e', '#8a5fb0', '#cf6a8e'];
-  function drawShip(wx) {
-    var x = worldToScreen(wx); var L = 360 * scale; if (x + L < -40 || x > CW + 40) return;
-    var bob = Math.sin(clock * 0.5) * 2 * scale;
-    var deckY = quayY - 30 * scale + bob;   // deck just below quay top
-    var hullH = 46 * scale;
-    ctx.save();
-    // reflection
-    reflect(x + 20, L - 40, [20, 30, 40], 0.18);
-    // hull
-    var hg = ctx.createLinearGradient(0, deckY, 0, deckY + hullH);
-    hg.addColorStop(0, '#2b3a47'); hg.addColorStop(1, '#161f28');
-    ctx.fillStyle = hg;
-    ctx.beginPath();
-    ctx.moveTo(x, deckY); ctx.lineTo(x + L, deckY);
-    ctx.lineTo(x + L - 26 * scale, deckY + hullH); ctx.lineTo(x + 16 * scale, deckY + hullH);
-    ctx.closePath(); ctx.fill();
-    // waterline stripe
-    ctx.fillStyle = '#c0473a'; ctx.fillRect(x + 14 * scale, deckY + hullH - 7 * scale, L - 36 * scale, 4 * scale);
-    // foam at waterline
-    ctx.fillStyle = 'rgba(255,255,255,.25)';
-    for (var fx = x + 10; fx < x + L - 20; fx += 9) ctx.fillRect(fx, deckY + hullH - 2 + Math.sin((fx + clock * 40) / 14) * 1.5, 5, 2);
-    // container stacks on deck
-    var cw = 30 * scale, ch = 13 * scale, cols = Math.floor((L - 110 * scale) / cw);
-    for (var c = 0; c < cols; c++) {
-      var stack = 1 + Math.floor(rnd(c * 1.7 + wx) * 3);
-      for (var r = 0; r < stack; r++) {
-        ctx.fillStyle = CONT_COLS[(c + r) % CONT_COLS.length];
-        var ccx = x + 50 * scale + c * cw, ccy = deckY - (r + 1) * ch;
-        ctx.fillRect(ccx, ccy, cw - 3, ch - 2);
-        ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.fillRect(ccx, ccy + ch - 4, cw - 3, 2);
+    // ---- the docked container ship (hull dips into the water at z<5) ----
+    var sx0 = 0;          // ship center x
+    add([sx0, -3.4, -6], [62, 5.6, 16], [0.16, 0.2, 0.26], { rough: 0.6, tex: 1, shadow: true });   // hull
+    add([sx0, -1.2, -6], [62.4, 0.8, 16.2], [0.7, 0.2, 0.17], { rough: 0.5 });                       // boot stripe
+    // container stacks on deck (deck top ~ y=2.2) — two rows across the beam
+    var rng = 7, ci = 0;
+    for (var cxi = -26; cxi <= 24; cxi += 5.2) {
+      for (var row = -1; row <= 1; row += 2) {
+        var stk = 1 + ((rng = (rng * 9301 + 49297) % 233280) / 233280 * 3 | 0);
+        for (var r = 0; r < stk; r++) {
+          add([sx0 + cxi, 2.2 + r * 2.4, -6 + row * 3.6], [4.8, 2.3, 6.4], CONT[(ci + r) % CONT.length], { rough: 0.7 });
+        }
+        ci++;
       }
     }
-    // superstructure (bridge) at stern
-    ctx.fillStyle = '#e7edf1'; ctx.fillRect(x + L - 70 * scale, deckY - 46 * scale, 44 * scale, 46 * scale);
-    ctx.fillStyle = '#26323c';
-    for (var wy = 0; wy < 3; wy++) ctx.fillRect(x + L - 66 * scale, deckY - 42 * scale + wy * 12 * scale, 36 * scale, 6 * scale);
-    // funnel + smoke
-    ctx.fillStyle = '#39434d'; ctx.fillRect(x + L - 50 * scale, deckY - 64 * scale, 16 * scale, 20 * scale);
-    ctx.fillStyle = '#c0473a'; ctx.fillRect(x + L - 50 * scale, deckY - 64 * scale, 16 * scale, 5 * scale);
-    smoke(x + L - 42 * scale, deckY - 64 * scale, wx);
-    ctx.restore();
-    return { x: x, deckY: deckY, L: L };
+    // superstructure + funnel at stern (+x)
+    add([sx0 + 26, 2.2, -6], [7, 8, 13], [0.9, 0.92, 0.93], { rough: 0.5 });
+    add([sx0 + 27, 10.2, -6], [3, 4, 4], [0.2, 0.22, 0.24], { rough: 0.5 });
+    add([sx0 + 27, 10.2, -6], [3.1, 1.2, 4.1], [0.75, 0.2, 0.17]);
   }
 
-  var smokePuffs = {};
-  function smoke(sx, sy, key) {
-    var arr = smokePuffs[key] || (smokePuffs[key] = []);
-    if (Math.random() < 0.14) arr.push({ x: sx, y: sy, r: 4 * scale, life: 0, max: 3 + Math.random() * 2, vx: 6 + Math.random() * 6 });
-    for (var i = arr.length - 1; i >= 0; i--) {
-      var p = arr[i];
-      if (paused && p.life === 0) { /* still: show a static puff */ }
-      p.life += 1 / 60; p.x += p.vx * (1 / 60); p.y -= 10 * (1 / 60); p.r += 9 * (1 / 60);
-      var a = clamp(1 - p.life / p.max, 0, 1) * 0.4;
-      if (a <= 0) { arr.splice(i, 1); continue; }
-      ctx.fillStyle = 'rgba(80,90,100,' + a + ')';
-      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, TAU); ctx.fill();
+  // gantry crane (animated) — returns dynamic draw entries each frame
+  function craneEntries() {
+    var out = [], baseX = 0, h = 30, boomZ0 = 5, boomZ1 = -16;
+    function E2(t, s, col, o) { o = o || {}; out.push({ t: t, s: s, ry: 0, col: col, rough: o.rough == null ? 0.5 : o.rough, emiss: o.emiss || [0, 0, 0], tex: 0, shadow: o.shadow !== false }); }
+    var col = [0.93, 0.72, 0.16];
+    // 4 legs
+    var lx = [baseX - 11, baseX + 11], lz = [4, -14];
+    for (var a = 0; a < 2; a++) for (var b = 0; b < 2; b++) E2([lx[a], 0, lz[b]], [2.4, h, 2.4], col);
+    // sill beams along z (joining front/back legs) at each x
+    E2([lx[0], h, -5], [2.6, 2.4, 22], col); E2([lx[1], h, -5], [2.6, 2.4, 22], col);
+    // portal beams across x (joining both sides) front & back
+    E2([baseX, h, 4], [24, 2.4, 2.6], col); E2([baseX, h, -14], [24, 2.4, 2.6], col);
+    // mid cross-ties for a trussed look
+    E2([baseX, h * 0.5, 4], [24, 1.5, 1.5], col); E2([baseX, h * 0.5, -14], [24, 1.5, 1.5], col);
+    // twin booms reaching across x over the ship
+    E2([baseX, h + 1.9, boomZ1 + 2], [30, 2.6, 3.0], col);
+    E2([baseX, h + 1.9, boomZ0], [30, 2.6, 3.0], col);
+    // machinery house on the gantry top
+    E2([baseX - 7, h + 2.4, -5], [7, 4.5, 9], [0.22, 0.24, 0.27], { rough: 0.5 });
+    // working trolley + spreader cycle
+    var ph = (clock * 0.16) % 1, carrying = ph > 0.34 && ph < 0.86, tz, drop;
+    if (ph < 0.15) { tz = lerp(boomZ0, boomZ1, ph / 0.15); drop = 2; }
+    else if (ph < 0.30) { tz = boomZ1; drop = lerp(2, 26, (ph - 0.15) / 0.15); }
+    else if (ph < 0.36) { tz = boomZ1; drop = 26; }
+    else if (ph < 0.52) { tz = boomZ1; drop = lerp(26, 2, (ph - 0.36) / 0.16); }
+    else if (ph < 0.70) { tz = lerp(boomZ1, boomZ0, (ph - 0.52) / 0.18); drop = 2; }
+    else if (ph < 0.84) { tz = boomZ0; drop = lerp(2, 22, (ph - 0.70) / 0.14); }
+    else { tz = boomZ0; drop = lerp(22, 2, (ph - 0.84) / 0.16); }
+    E2([baseX, h + 1.5, tz], [6, 1.4, 4], [0.8, 0.5, 0.12]);                       // trolley
+    E2([baseX, h + 1.5 - drop, tz], [5, 0.8, 4.4], [0.12, 0.13, 0.15]);            // spreader
+    if (carrying) E2([baseX, h + 0.5 - drop, tz], [4.6, 2.2, 4.2], CONT[(clock | 0) % CONT.length]);
+    return out;
+  }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+
+  // ---- day/night ----
+  function skyCols() {
+    // simple keyframe: 0 night, .25 dawn, .5 day, .75 dusk
+    var d = Math.cos(tod * Math.PI * 2);           // 1 at midnight, -1 at noon
+    var day = (1 - d) * 0.5;                        // 0 night .. 1 noon
+    function mix(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
+    var nightTop = [0.04, 0.06, 0.13], dayTop = [0.30, 0.52, 0.82];
+    var nightBot = [0.08, 0.10, 0.18], dayBot = [0.66, 0.78, 0.90];
+    var top = mix(nightTop, dayTop, day), bot = mix(nightBot, dayBot, day);
+    // dawn/dusk warm tint near horizon when sun low
+    var warm = Math.max(0, 1 - Math.abs(d) * 1.4) * (tod < 0.5 ? 1 : 1);
+    bot = mix(bot, [1.0, 0.55, 0.3], warm * 0.5);
+    var sunCol = mix([0.25, 0.3, 0.55], [1.15, 1.04, 0.86], day);
+    return { top: top, bot: bot, sunCol: sunCol, day: day, warm: warm };
+  }
+  function sunDir() {
+    var ang = (tod - 0.25) * Math.PI * 2;           // noon = up
+    var e = Math.sin(ang) * 0.9 + 0.12;
+    var y = Math.max(0.06, e);
+    return norm([Math.cos(ang) * 0.7, y, 0.45]);
+  }
+  function norm(v) { var l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; }
+
+  // ---- render ----
+  function eye() {
+    var ce = Math.cos(cam.el), se = Math.sin(cam.el), ca = Math.cos(cam.az), sa = Math.sin(cam.az);
+    return [cam.tx + cam.dist * ce * sa, cam.ty + cam.dist * se, cam.tz + cam.dist * ce * ca];
+  }
+  var mView = mat4 && mat4.create(), mProj = mat4 && mat4.create(), mVP = mat4 && mat4.create(),
+    mLightV = mat4 && mat4.create(), mLightP = mat4 && mat4.create(), mLightVP = mat4 && mat4.create(), mModel = mat4 && mat4.create();
+
+  function setU(P, name, v) { var l = P.u[name]; if (l) gl.uniform3fv(l, v); }
+  function drawList(P, list, depthOnly) {
+    for (var i = 0; i < list.length; i++) {
+      var o = list[i];
+      if (depthOnly && o.shadow === false) continue;
+      mat4.compose(mModel, o.t[0], o.t[1], o.t[2], o.s[0], o.s[1], o.s[2], o.ry);
+      gl.uniformMatrix4fv(P.u.uModel, false, mModel);
+      if (!depthOnly) {
+        gl.uniform3fv(P.u.uBase, o.col); gl.uniform1f(P.u.uRough, o.rough);
+        gl.uniform3fv(P.u.uEmiss, o.emiss); gl.uniform1f(P.u.uTexMix, o.tex);
+      }
+      gl.bindVertexArray(boxMesh.vao); gl.drawElements(gl.TRIANGLES, boxMesh.count, gl.UNSIGNED_SHORT, 0);
     }
   }
 
-  // ---- gantry crane with a working load cycle ----
-  function drawCrane(wx, opts) {
-    opts = opts || {};
-    var x = worldToScreen(wx); var legSpan = 70 * scale; if (x + 200 < -40 || x - 80 > CW + 40) return;
-    var h = 150 * scale, topY = quayY - h, boomY = topY + 14 * scale;
-    var boomOut = x + 150 * scale;     // reaches out over the water/ship
-    var boomIn = x - 50 * scale;       // back over the quay stacks
-    var col = '#e8b04a';
-    ctx.lineWidth = 5 * scale; ctx.strokeStyle = col;
-    // legs
-    line(x - legSpan * 0.3, quayY, x - legSpan * 0.1, topY);
-    line(x + legSpan * 0.6, quayY, x + legSpan * 0.3, topY);
-    line(x - legSpan * 0.3 + 18 * scale, quayY, x - legSpan * 0.1 + 18 * scale, topY);
-    // top + boom
-    ctx.lineWidth = 6 * scale;
-    line(boomIn, boomY, boomOut, boomY);
-    line(boomIn, topY, boomOut - 20 * scale, topY);
-    // A-frame apex tie
-    ctx.lineWidth = 3 * scale;
-    line(x + 10 * scale, topY - 26 * scale, boomOut - 20 * scale, boomY);
-    line(x + 10 * scale, topY - 26 * scale, boomIn, boomY);
-    line(x, topY, x + 10 * scale, topY - 26 * scale);
+  function render() {
+    if (!gl) return;
+    var sky = skyCols(), sd = sunDir(), ev = eye();
+    var target = [cam.tx, cam.ty, cam.tz];
+    var dyn = craneEntries(), all = statics.concat(dyn);
 
-    // working cycle
-    if (opts.work) {
-      var ph = (clock * 0.18) % 1;
-      var carrying = ph > 0.34 && ph < 0.86;
-      var trolleyX, spreaderDrop;
-      if (ph < 0.15) { trolleyX = lerp(boomIn, boomOut, ph / 0.15); spreaderDrop = 8 * scale; }
-      else if (ph < 0.30) { trolleyX = boomOut; spreaderDrop = lerp(8, 92, (ph - 0.15) / 0.15) * scale; }
-      else if (ph < 0.36) { trolleyX = boomOut; spreaderDrop = 92 * scale; }
-      else if (ph < 0.52) { trolleyX = boomOut; spreaderDrop = lerp(92, 8, (ph - 0.36) / 0.16) * scale; }
-      else if (ph < 0.70) { trolleyX = lerp(boomOut, boomIn, (ph - 0.52) / 0.18); spreaderDrop = 8 * scale; }
-      else if (ph < 0.84) { trolleyX = boomIn; spreaderDrop = lerp(8, 70, (ph - 0.70) / 0.14) * scale; }
-      else { trolleyX = boomIn; spreaderDrop = lerp(70, 8, (ph - 0.84) / 0.16) * scale; }
-      // cable
-      ctx.lineWidth = 1.5 * scale; ctx.strokeStyle = '#cfd6da';
-      line(trolleyX, boomY, trolleyX, boomY + spreaderDrop);
-      // trolley
-      ctx.fillStyle = '#cf8a2e'; ctx.fillRect(trolleyX - 8 * scale, boomY - 4 * scale, 16 * scale, 8 * scale);
-      // spreader + container
-      ctx.fillStyle = '#2b333b'; ctx.fillRect(trolleyX - 16 * scale, boomY + spreaderDrop, 32 * scale, 4 * scale);
-      if (carrying) { ctx.fillStyle = CONT_COLS[Math.floor(ph * 13) % CONT_COLS.length]; ctx.fillRect(trolleyX - 15 * scale, boomY + spreaderDrop + 4 * scale, 30 * scale, 13 * scale); }
-    }
-    // quay container stack near boomIn
-    for (var s = 0; s < 4; s++) {
-      ctx.fillStyle = CONT_COLS[(s + (wx | 0)) % CONT_COLS.length];
-      ctx.fillRect(boomIn - 18 * scale, quayY - (s + 1) * 13 * scale, 30 * scale, 12 * scale);
-    }
-  }
-  function line(x0, y0, x1, y1) { ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); }
+    // shadow pass
+    var sunPos = [target[0] + sd[0] * 80, target[1] + sd[1] * 80, target[2] + sd[2] * 80];
+    mat4.lookAt(mLightV, sunPos, target, [0, 1, 0]);
+    mat4.ortho(mLightP, -95, 95, -95, 95, 1, 220);
+    mat4.mul(mLightVP, mLightP, mLightV);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, E.shadowFB);
+    gl.viewport(0, 0, E.SH, E.SH); gl.clear(gl.DEPTH_BUFFER_BIT);
+    gl.enable(gl.DEPTH_TEST); gl.enable(gl.CULL_FACE); gl.cullFace(gl.FRONT);
+    gl.useProgram(E.P_depth.p); gl.uniformMatrix4fv(E.P_depth.u.uLightVP, false, mLightVP);
+    drawList(E.P_depth, all, true);
+    gl.cullFace(gl.BACK);
 
-  // night darkening overlay on the water/foreground for mood
-  function drawNightVeil() {
-    if (sky.dark <= 0.05) return;
-    ctx.fillStyle = 'rgba(8,14,32,' + sky.dark * 0.28 + ')';
-    ctx.fillRect(0, 0, CW, CH);
+    // main pass
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.clearColor(sky.bot[0], sky.bot[1], sky.bot[2], 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    mat4.perspective(mProj, 0.85, canvas.width / canvas.height, 0.5, 600);
+    mat4.lookAt(mView, ev, target, [0, 1, 0]); mat4.mul(mVP, mProj, mView);
+
+    // sky
+    gl.depthMask(false); gl.disable(gl.CULL_FACE);
+    var S = E.P_sky; gl.useProgram(S.p);
+    setU(S, 'uTop', sky.top); setU(S, 'uBot', sky.bot); setU(S, 'uSunCol', sky.sunCol);
+    var sunScreen = [0.5 + sd[0] * 0.4, 0.35 + sd[1] * 0.5];
+    if (S.u.uSun) gl.uniform2fv(S.u.uSun, sunScreen);
+    gl.bindVertexArray(E.quad.vao); gl.drawElements(gl.TRIANGLES, E.quad.count, gl.UNSIGNED_SHORT, 0);
+    gl.depthMask(true); gl.enable(gl.CULL_FACE);
+
+    // scene
+    var M = E.P_main; gl.useProgram(M.p);
+    gl.uniformMatrix4fv(M.u.uVP, false, mVP); gl.uniformMatrix4fv(M.u.uLightVP, false, mLightVP);
+    setU(M, 'uSunDir', sd); setU(M, 'uSunCol', sky.sunCol);
+    setU(M, 'uAmbTop', [0.4 * (0.3 + sky.day), 0.45 * (0.3 + sky.day), 0.6 * (0.3 + sky.day)]);
+    setU(M, 'uAmbBot', [0.12, 0.13, 0.15]);
+    setU(M, 'uCam', ev); setU(M, 'uFog', sky.bot); gl.uniform1f(M.u.uFogD, 0.0026);
+    gl.uniform1f(M.u.uShadowOn, 1);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, E.shadowTex); if (M.u.uShadow) gl.uniform1i(M.u.uShadow, 0);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, gritTex); if (M.u.uTex) gl.uniform1i(M.u.uTex, 1);
+    drawList(M, all, false);
+
+    // water
+    var W = E.P_water; gl.useProgram(W.p);
+    gl.uniformMatrix4fv(W.u.uVP, false, mVP); gl.uniform1f(W.u.uTime, clock);
+    setU(W, 'uCam', ev); setU(W, 'uSunDir', sd); setU(W, 'uSunCol', sky.sunCol);
+    setU(W, 'uDeep', [0.015, 0.07, 0.11]); setU(W, 'uShallow', [0.04, 0.16, 0.2]);
+    setU(W, 'uSky', sky.bot); setU(W, 'uFog', sky.bot); gl.uniform1f(W.u.uFogD, 0.0026);
+    gl.disable(gl.CULL_FACE);
+    gl.bindVertexArray(waterMesh.vao); gl.drawElements(gl.TRIANGLES, waterMesh.count, gl.UNSIGNED_SHORT, 0);
+    gl.enable(gl.CULL_FACE);
   }
 
-  function draw() {
-    sky = skyAt(tod);
-    var ls = lightSource();
-    ctx.clearRect(0, 0, CW, CH);
-    drawSky();
-    drawSunMoon(ls);
-    drawClouds();
-    drawSkyline();
-    drawSea(ls);
-    drawQuay();
-    // foreground scene objects (back-to-front) — composed around the hero berth
-    drawLighthouse(40);
-    drawWarehouse(150, 110, '#7c8794');
-    drawShip(250);                       // hero: docked container ship 250..~610
-    drawCrane(430, { work: true });      // working crane over the ship
-    drawWarehouse(660, 120, '#6f7b86');
-    drawCrane(800, { work: false });
-    drawWarehouse(1000, 160, '#79848f');
-    drawCrane(1180, { work: false });
-    drawWarehouse(1380, 130, '#6f7b86');
-    drawNightVeil();
+  // ---- input: orbit + zoom ----
+  var drag = false, lx = 0, ly = 0, pinch = 0;
+  function pt(e) { var b = canvas.getBoundingClientRect(); return { x: (e.clientX - b.left), y: (e.clientY - b.top) }; }
+  if (canvas.addEventListener) {
+    canvas.addEventListener('pointerdown', function (e) { drag = true; var p = pt(e); lx = p.x; ly = p.y; });
+    canvas.addEventListener('pointermove', function (e) {
+      if (!drag) return; var p = pt(e); var dx = p.x - lx, dy = p.y - ly; lx = p.x; ly = p.y;
+      cam.az -= dx * 0.006; cam.el = clamp(cam.el - dy * 0.005, 0.16, 1.25);
+      if (hintEl) hintEl.classList.add('gone');
+    });
+    window.addEventListener('pointerup', function () { drag = false; });
+    canvas.addEventListener('wheel', function (e) { e.preventDefault(); cam.dist = clamp(cam.dist * (1 + e.deltaY * 0.0012), 45, 190); }, { passive: false });
+    canvas.addEventListener('touchmove', function (e) {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        var d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        if (pinch) cam.dist = clamp(cam.dist * (pinch / d), 45, 190); pinch = d;
+      }
+    }, { passive: false });
+    canvas.addEventListener('touchend', function () { pinch = 0; });
+  }
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+
+  // ---- loop ----
+  function frame(now) {
+    var dt = Math.min(0.05, (now - (frame._l || now)) / 1000); frame._l = now;
+    clock += dt; if (!paused) tod = (tod + dt * todSpeed) % 1;
+    if (clockEl) { var hh = Math.floor(tod * 24), mm = Math.floor((tod * 24 % 1) * 60); clockEl.textContent = ('0' + hh).slice(-2) + ':' + ('0' + mm).slice(-2); }
+    render();
+    requestAnimationFrame(frame);
   }
 
-  // ===================== LOOP / INPUT =====================
-  function update(dt) {
-    clock += dt;
-    if (!paused) tod = (tod + dt * TOD_SPEED) % 1;
-    panX += (panTarget - panX) * Math.min(1, dt * 10);
-    // clock label
-    var hh = Math.floor(tod * 24), mm = Math.floor((tod * 24 % 1) * 60);
-    if (clockEl) clockEl.textContent = ('0' + hh).slice(-2) + ':' + ('0' + mm).slice(-2);
-  }
-
-  var dragging = false, lastX = 0, moved = 0;
-  function cptX(clientX) { var b = canvas.getBoundingClientRect(); return (clientX - b.left) * (CW / b.width); }
-  canvas.addEventListener('pointerdown', function (e) { dragging = true; lastX = cptX(e.clientX); moved = 0; });
-  canvas.addEventListener('pointermove', function (e) {
-    if (!dragging) return;
-    var x = cptX(e.clientX), d = x - lastX; lastX = x; moved += Math.abs(d);
-    userPanned = true;
-    panTarget = clamp(panTarget - d, 0, Math.max(0, WORLDW - CW));
-    if (moved > 30 && hintEl) hintEl.classList.add('gone');
-  });
-  window.addEventListener('pointerup', function () { dragging = false; });
-
-  // ---- boot ----
   function boot() {
-    Portal.loadingStart();
-    buildSkyline(); layout();
-    // URL overrides (screenshots)
-    try {
-      var q = window.location.search;
-      var mt = /[?&]tod=([0-9.]+)/.exec(q); if (mt) tod = +mt[1] % 1;
-      var mp = /[?&]pan=([0-9.]+)/.exec(q); if (mp) { userPanned = true; panTarget = panX = (+mp[1]) * Math.max(0, WORLDW - CW); }
-      if (/[?&]still\b/.test(q)) paused = true;
-    } catch (e) {}
-
-    if (window.ResizeObserver) new ResizeObserver(function () { buildSkyline(); layout(); }).observe(wrap);
-    window.addEventListener('resize', function () { buildSkyline(); layout(); });
-    window.addEventListener('orientationchange', function () { setTimeout(layout, 200); });
-
-    var last = performance.now();
-    (function frame(now) { var dt = Math.min(0.05, (now - last) / 1000); last = now; update(dt); draw(); requestAnimationFrame(frame); })(performance.now());
-
-    Portal.init().then(function () {
-      Portal.loadingStop(); Portal.mute(Juice.Audio.isMuted());
-      if (loader) loader.classList.add('hidden');
-      Portal.gameStart();
+    if (window.Portal) Portal.loadingStart();
+    if (!gl) { if (loader) loader.innerHTML = '<div style="color:#fff;font-family:sans-serif;padding:20px;text-align:center">WebGL2 is required to play HARBOR.</div>'; return; }
+    E = HGL.createEngine(gl);
+    gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL); gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK);
+    boxMesh = E.mesh(E.box(1, 1, 1)); waterMesh = E.mesh(E.plane(360, 140)); gritTex = E.texture(gritTexture());
+    buildScene();
+    resize();
+    try { var q = window.location.search; var mt = /[?&]tod=([0-9.]+)/.exec(q); if (mt) tod = +mt[1] % 1;
+      var ma = /[?&]az=(-?[0-9.]+)/.exec(q); if (ma) cam.az = +ma[1];
+      var me = /[?&]el=([0-9.]+)/.exec(q); if (me) cam.el = +me[1];
+      var md = /[?&]dist=([0-9.]+)/.exec(q); if (md) cam.dist = +md[1];
+      if (/[?&]still\b/.test(q)) paused = true; } catch (e) {}
+    if (window.ResizeObserver) new ResizeObserver(resize).observe(wrap);
+    window.addEventListener('resize', resize);
+    requestAnimationFrame(frame);
+    if (window.Portal) Portal.init().then(function () {
+      Portal.loadingStop(); if (loader) loader.classList.add('hidden'); Portal.gameStart();
     });
   }
 
-  // ---- headless hook (expands in later phases) ----
+  // ---- headless hook (sim grows here later; renderer-guarded) ----
   window.__harbor = {
-    state: function () { return { tod: Math.round(tod * 1000) / 1000, panX: Math.round(panX), worldW: WORLDW, dark: Math.round((skyAt(tod).dark) * 100) / 100, phase: 'look-slice' }; },
-    setTod: function (t) { tod = t % 1; },
-    setPan: function (f) { panTarget = panX = f * Math.max(0, WORLDW - CW); },
-    pause: function (p) { paused = !!p; }
+    state: function () { return { tod: Math.round(tod * 1000) / 1000, cam: { az: cam.az, el: cam.el, dist: cam.dist }, webgl: !!gl, phase: 'look-slice-3d' }; },
+    setTod: function (t) { tod = t % 1; }, pause: function (p) { paused = !!p; },
+    setCam: function (o) { for (var k in o) cam[k] = o[k]; }
   };
 
-  boot();
+  if (canvas && canvas.getContext) boot();
 })();
