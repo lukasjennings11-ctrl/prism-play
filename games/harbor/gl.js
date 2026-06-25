@@ -100,6 +100,17 @@
     for (i = 0; i < b2.I.length; i++) this.I.push(b2.I[i] + off);
     return this;
   };
+  // merge another builder, baking a translate + Y-rotation (yaw) into positions & normals.
+  // Used to anchor a locally-built port to the founded harbour frame {ox,oz,yaw}.
+  Builder.prototype.addXform = function (b2, ox, oy, oz, yaw) {
+    var off = this.P.length / 3, c = Math.cos(yaw), s = Math.sin(yaw), i;
+    for (i = 0; i < b2.P.length; i += 3) { var x = b2.P[i], y = b2.P[i + 1], z = b2.P[i + 2]; this.P.push(x * c + z * s + ox, y + oy, -x * s + z * c + oz); }
+    for (i = 0; i < b2.N.length; i += 3) { var nx = b2.N[i], ny = b2.N[i + 1], nz = b2.N[i + 2]; this.N.push(nx * c + nz * s, ny, -nx * s + nz * c); }
+    for (i = 0; i < b2.U.length; i++) this.U.push(b2.U[i]);
+    for (i = 0; i < b2.C.length; i++) this.C.push(b2.C[i]);
+    for (i = 0; i < b2.I.length; i++) this.I.push(b2.I[i] + off);
+    return this;
+  };
   Builder.prototype.data = function () {
     return { positions: new Float32Array(this.P), normals: new Float32Array(this.N), uvs: new Float32Array(this.U), colors: new Float32Array(this.C), indices: new Uint32Array(this.I) };
   };
@@ -180,7 +191,7 @@
   var V_WATER = `#version 300 es
   layout(location=0) in vec3 aPos; uniform mat4 uVP; uniform float uTime; out vec3 vW; out vec3 vN;
   void main(){ vec3 p=aPos; float t=uTime;
-    float h=sin(p.x*0.18+t*1.1)*0.06+sin(p.z*0.23-t*0.9)*0.05+sin((p.x+p.z)*0.4+t*1.7)*0.025; p.y+=h-0.30; // sit below the land plate so crests never poke through
+    float h=sin(p.x*0.18+t*1.1)*0.06+sin(p.z*0.23-t*0.9)*0.05+sin((p.x+p.z)*0.4+t*1.7)*0.025; p.y+=h-0.12; // sea level just below the heightfield coastline
     float dx=cos(p.x*0.18+t*1.1)*0.018+cos((p.x+p.z)*0.4+t*1.7)*0.016;
     float dz=cos(p.z*0.23-t*0.9)*0.021+cos((p.x+p.z)*0.4+t*1.7)*0.016;
     vN=normalize(vec3(-dx,1.0,-dz)); vW=p; gl_Position=uVP*vec4(p,1.0); }`;
@@ -198,6 +209,14 @@
     float dist=length(uCam-vW); float f=1.0-exp(-uFogD*dist); col=mix(col,uFog,clamp(f,0.0,1.0));
     col*=uExposure; float luma=dot(col,vec3(0.299,0.587,0.114)); col=mix(vec3(luma),col,uSat);
     frag=vec4(aces(col),1.0); }`;
+
+  // soft contact-shadow blob: a flat ground decal with radial alpha (no shadow map → no "cloud shadows")
+  var V_BLOB = `#version 300 es
+  layout(location=0) in vec3 aPos; layout(location=2) in vec2 aUV; uniform mat4 uVP, uModel; out vec2 vUv;
+  void main(){ vUv=aUV; gl_Position=uVP*uModel*vec4(aPos,1.0); }`;
+  var F_BLOB = `#version 300 es
+  precision highp float; in vec2 vUv; uniform sampler2D uTex; uniform float uStr; out vec4 frag;
+  void main(){ float a=texture(uTex,vUv).a*uStr; frag=vec4(0.0,0.0,0.0,a); }`;
 
   // ---------------- engine ----------------
   function createEngine(gl) {
@@ -221,8 +240,9 @@
     var shadowFB = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, shadowFB); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, shadowTex, 0); gl.drawBuffers([gl.NONE]); gl.readBuffer(gl.NONE); gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
     var quad = mesh({ positions: new Float32Array([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0]), indices: new Uint16Array([0, 1, 2, 0, 2, 3]) });
+    var blobQuad = mesh(plane(2, 1)); // unit XZ plane (-1..1), uvs 0..1 — for ground shadow decals
     return { gl: gl, mat4: mat4, mesh: mesh, texture: texture, plane: plane, SH: SH, shadowFB: shadowFB, shadowTex: shadowTex,
-      P_main: prog(V_MAIN, F_MAIN), P_depth: prog(V_DEPTH, F_DEPTH), P_sky: prog(V_SKY, F_SKY), P_water: prog(V_WATER, F_WATER), quad: quad };
+      P_main: prog(V_MAIN, F_MAIN), P_depth: prog(V_DEPTH, F_DEPTH), P_sky: prog(V_SKY, F_SKY), P_water: prog(V_WATER, F_WATER), P_blob: prog(V_BLOB, F_BLOB), quad: quad, blobQuad: blobQuad };
   }
 
   global.HGL = { mat4: mat4, Builder: Builder, geom: { plane: plane }, createEngine: createEngine };
