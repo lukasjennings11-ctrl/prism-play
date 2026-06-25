@@ -13,7 +13,8 @@
 
   var CW = 0, CH = 0, DPR = 1, clock = 0, tod = 0.42, todSpeed = 1 / 160, paused = false;
   // camera: current + targets + fling velocity
-  var C = { az: 2.42, el: 0.5, dist: 120, azT: 2.42, elT: 0.5, distT: 120, vAz: 0, vEl: 0, tx: 0, ty: 6, tz: 4, txT: 0, tzT: 4 };
+  var C = { az: 2.42, el: 0.5, dist: 120, azT: 2.42, elT: 0.5, distT: 120, vAz: 0, vEl: 0, tx: 0, ty: 6, tz: 4, txT: 0, tzT: 4, vTx: 0, vTz: 0 };
+  var PANX = 1140, PANZ0 = -90, PANZ1 = 280;   // pan clamp over the long coast
   var biomeId = 'green', biome = null, unlocked = ['green'];
 
   function resize() {
@@ -197,7 +198,7 @@
     gl.uniform3fv(M.u.uSunDir, sd); gl.uniform3fv(M.u.uSunCol, en.sun);
     gl.uniform3fv(M.u.uAmbTop, [0.42 * (0.5 + en.day * 0.8), 0.47 * (0.5 + en.day * 0.8), 0.58 * (0.5 + en.day * 0.8)]);
     gl.uniform3fv(M.u.uAmbBot, [0.18, 0.19, 0.22]);
-    gl.uniform3fv(M.u.uCam, ev); gl.uniform3fv(M.u.uFog, en.bot); gl.uniform1f(M.u.uFogD, 0.0011);
+    gl.uniform3fv(M.u.uCam, ev); gl.uniform3fv(M.u.uFog, en.bot); gl.uniform1f(M.u.uFogD, 0.0);  // no fog — crisp distance
     gl.uniform3fv(M.u.uWin, [1.0, 0.82, 0.46]); gl.uniform1f(M.u.uNight, en.night); gl.uniform1f(M.u.uTime, clock);
     gl.uniform1f(M.u.uExposure, 1.62); gl.uniform1f(M.u.uSat, 1.3); gl.uniform1f(M.u.uShadowOn, 0);
     gl.uniform1f(M.u.uToon, 1); gl.uniform1f(M.u.uVCol, 1); gl.uniform1f(M.u.uAlbedo, 0);
@@ -231,7 +232,7 @@
     var W = E.P_water; gl.useProgram(W.p); gl.uniformMatrix4fv(W.u.uVP, false, mVP); gl.uniform1f(W.u.uTime, clock);
     gl.uniform3fv(W.u.uCam, ev); gl.uniform3fv(W.u.uSunDir, sd); gl.uniform3fv(W.u.uSunCol, en.sun);
     gl.uniform3fv(W.u.uDeep, biome.deep); gl.uniform3fv(W.u.uShallow, biome.shallow);
-    gl.uniform3fv(W.u.uSky, en.bot); gl.uniform3fv(W.u.uFog, en.bot); gl.uniform1f(W.u.uFogD, 0.0014);
+    gl.uniform3fv(W.u.uSky, en.bot); gl.uniform3fv(W.u.uFog, en.bot); gl.uniform1f(W.u.uFogD, 0.0);
     gl.uniform1f(W.u.uExposure, 1.58); gl.uniform1f(W.u.uSat, 1.25);
     gl.disable(gl.CULL_FACE); drawMesh(W, waterMesh); gl.enable(gl.CULL_FACE);
   }
@@ -272,56 +273,72 @@
     if (best) foundHere(best.x, best.z);
   }
 
-  // ---- input: unified pointer gestures (1 finger = orbit, 2 fingers = pinch-zoom + pan) ----
-  // One handler tracks all active pointers so a pinch never doubles as an orbit (the spin-out bug).
-  var ptrs = new Map(), pinchPrev = 0, panPrev = null, lastTap = 0, downPt = null, moved = false, multi = false;
+  // ---- input: PAN-FIRST. 1 finger / left-drag = travel along the coast; pinch / wheel = zoom;
+  // 2-finger twist (or right-drag / Shift+drag) = rotate; tap = scout; arrow keys / WASD pan. ----
+  var ptrs = new Map(), pinchPrev = 0, panPrev = null, twistPrev = null, lastTap = 0, downPt = null, moved = false, multi = false, orbitMode = false;
   function pxy(e) { var b = canvas.getBoundingClientRect(); return { x: e.clientX - b.left, y: e.clientY - b.top }; }
   function defaultView() { C.azT = 2.42; C.elT = 0.52; C.distT = Math.min(190, Math.max(120, CH * 0.24)); C.txT = founded[biomeId] ? founded[biomeId].x : 0; C.tzT = founded[biomeId] ? founded[biomeId].z : 6; }
+  // screen drag (px) -> world pan of the focus point, along the camera azimuth basis ("grab the world")
+  function panBy(mx, my) {
+    var scl = C.dist * 0.0016, ce = Math.cos(C.az), se = Math.sin(C.az);
+    var ddx = -mx * scl * ce + my * scl * se, ddz = mx * scl * se + my * scl * ce;
+    C.txT = clamp(C.txT + ddx, -PANX, PANX); C.tzT = clamp(C.tzT + ddz, PANZ0, PANZ1);
+    C.vTx = ddx; C.vTz = ddz;
+  }
   if (canvas.addEventListener) {
+    canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
     canvas.addEventListener('pointerdown', function (e) {
       if (canvas.setPointerCapture) try { canvas.setPointerCapture(e.pointerId); } catch (x) {}
-      ptrs.set(e.pointerId, pxy(e)); C.vAz = C.vEl = 0;
-      if (ptrs.size === 1) { downPt = pxy(e); moved = false; multi = false; var now = Date.now(); if (now - lastTap < 300) defaultView(); lastTap = now; }
-      else { multi = true; pinchPrev = 0; panPrev = null; }   // entering multi-touch
+      ptrs.set(e.pointerId, pxy(e)); C.vAz = C.vEl = C.vTx = C.vTz = 0;
+      if (ptrs.size === 1) { downPt = pxy(e); moved = false; multi = false; orbitMode = (e.button === 2 || e.shiftKey); var now = Date.now(); if (now - lastTap < 300) defaultView(); lastTap = now; }
+      else { multi = true; pinchPrev = 0; panPrev = null; twistPrev = null; }
     });
     canvas.addEventListener('pointermove', function (e) {
       if (!ptrs.has(e.pointerId)) return;
       var p = pxy(e), prev = ptrs.get(e.pointerId); ptrs.set(e.pointerId, p);
-      if (ptrs.size === 1) {                              // orbit — calmer sensitivity + inertia
+      if (ptrs.size === 1) {
         var dx = p.x - prev.x, dy = p.y - prev.y;
         if (downPt && Math.hypot(p.x - downPt.x, p.y - downPt.y) > 8) { moved = true; if (hintEl) hintEl.classList.add('gone'); }
-        C.azT -= dx * 0.0045; C.elT = clamp(C.elT - dy * 0.0035, 0.14, 1.3);
-        C.vAz = -dx * 0.0045; C.vEl = -dy * 0.0035;
-      } else if (ptrs.size >= 2) {                        // pinch-zoom + pan, orbit disabled
+        if (orbitMode) { C.azT -= dx * 0.0045; C.elT = clamp(C.elT - dy * 0.0035, 0.14, 1.3); C.vAz = -dx * 0.0045; C.vEl = -dy * 0.0035; }
+        else panBy(dx, dy);                                  // pan-first: drag travels along the coast
+      } else if (ptrs.size >= 2) {
         var pts = Array.from(ptrs.values()), a = pts[0], b = pts[1];
         var d = Math.hypot(a.x - b.x, a.y - b.y), mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-        if (pinchPrev) { var f = clamp(pinchPrev / d, 0.5, 1.5); C.distT = clamp(C.distT * f, 42, 360); }
+        if (pinchPrev) { var f = clamp(pinchPrev / d, 0.5, 1.5); C.distT = clamp(C.distT * f, 40, 520); }
         pinchPrev = d;
-        if (panPrev) {
-          var scl = C.dist * 0.0016, ce = Math.cos(C.az), se = Math.sin(C.az);
-          var mx = mid.x - panPrev.x, my = mid.y - panPrev.y;
-          C.txT = clamp(C.txT - mx * scl * ce + my * scl * se, -300, 300);
-          C.tzT = clamp(C.tzT + mx * scl * se + my * scl * ce, -80, 320);
-        }
-        panPrev = mid; C.vAz = C.vEl = 0;
+        var ang = Math.atan2(a.y - b.y, a.x - b.x);          // twist -> rotate
+        if (twistPrev != null) { var da = ang - twistPrev; if (da > Math.PI) da -= 2 * Math.PI; if (da < -Math.PI) da += 2 * Math.PI; C.azT += da; C.vAz = da; }
+        twistPrev = ang;
+        if (panPrev) panBy(mid.x - panPrev.x, mid.y - panPrev.y);
+        panPrev = mid;
       }
     });
     function up(e) {
       var was = ptrs.has(e.pointerId);
       if (ptrs.delete(e.pointerId) && canvas.releasePointerCapture) try { canvas.releasePointerCapture(e.pointerId); } catch (x) {}
-      if (was && !moved && !multi && ptrs.size === 0 && downPt) {     // a clean tap
-        if (foundMode()) scoutAt(downPt.x, downPt.y);
-      }
-      if (ptrs.size < 2) { pinchPrev = 0; panPrev = null; multi = false; }
+      if (was && !moved && !multi && ptrs.size === 0 && downPt) { if (foundMode()) scoutAt(downPt.x, downPt.y); }   // clean tap = scout
+      if (ptrs.size < 2) { pinchPrev = 0; panPrev = null; twistPrev = null; multi = false; }
     }
     window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
-    canvas.addEventListener('wheel', function (e) { e.preventDefault(); var f = clamp(1 + e.deltaY * 0.0012, 0.8, 1.25); C.distT = clamp(C.distT * f, 42, 360); }, { passive: false });
+    canvas.addEventListener('wheel', function (e) { e.preventDefault(); var f = clamp(1 + e.deltaY * 0.0012, 0.8, 1.25); C.distT = clamp(C.distT * f, 40, 520); }, { passive: false });
+    window.addEventListener('keydown', function (e) {
+      var k = e.key, m = 46;
+      if (k === 'ArrowRight' || k === 'd' || k === 'D') panBy(-m, 0);
+      else if (k === 'ArrowLeft' || k === 'a' || k === 'A') panBy(m, 0);
+      else if (k === 'ArrowUp' || k === 'w' || k === 'W') panBy(0, m);
+      else if (k === 'ArrowDown' || k === 's' || k === 'S') panBy(0, -m);
+      else return;
+      C.vTx = C.vTz = 0; e.preventDefault();
+    });
   }
 
   function frame(now) {
     var dt = Math.min(0.05, (now - (frame._l || now)) / 1000); frame._l = now;
     clock += dt; if (!paused) tod = (tod + dt * todSpeed) % 1;
-    if (ptrs.size === 0) { C.azT += C.vAz; C.elT = clamp(C.elT + C.vEl, 0.14, 1.3); C.vAz *= 0.92; C.vEl *= 0.92; if (Math.abs(C.vAz) < 1e-4) C.vAz = 0; if (Math.abs(C.vEl) < 1e-4) C.vEl = 0; }
+    if (ptrs.size === 0) {
+      C.azT += C.vAz; C.elT = clamp(C.elT + C.vEl, 0.14, 1.3); C.vAz *= 0.92; C.vEl *= 0.92; if (Math.abs(C.vAz) < 1e-4) C.vAz = 0; if (Math.abs(C.vEl) < 1e-4) C.vEl = 0;
+      C.txT = clamp(C.txT + C.vTx, -PANX, PANX); C.tzT = clamp(C.tzT + C.vTz, PANZ0, PANZ1); C.vTx *= 0.90; C.vTz *= 0.90; if (Math.abs(C.vTx) < 1e-3) C.vTx = 0; if (Math.abs(C.vTz) < 1e-3) C.vTz = 0;
+    }
     var k = Math.min(1, dt * 11); C.az += (C.azT - C.az) * k; C.el += (C.elT - C.el) * k; C.dist += (C.distT - C.dist) * Math.min(1, dt * 9);
     C.tx += (C.txT - C.tx) * k; C.tz += (C.tzT - C.tz) * k;
     if (clockEl) { var hh = Math.floor(tod * 24), mm = Math.floor((tod * 24 % 1) * 60); clockEl.textContent = ('0' + hh).slice(-2) + ':' + ('0' + mm).slice(-2); }
@@ -383,7 +400,7 @@
     E = HGL.createEngine(gl);
     gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL); gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK);
     boxMesh = E.mesh(new HGL.Builder().box(0, 0, 0, 1, 1, 1, [1, 1, 1]).data());
-    waterMesh = E.mesh(E.plane(1100, 200)); facTex = E.texture(facadeTexture()); gritTex = E.texture(gritTexture()); blobTex = E.texture(blobTexture());
+    waterMesh = E.mesh(E.plane(2900, 300)); facTex = E.texture(facadeTexture()); gritTex = E.texture(gritTexture()); blobTex = E.texture(blobTexture());
     loadAssets();
     loadUnlocked(); loadFounded();
     era = (window.Retention && Retention.get(GAME, 'era', 0) | 0) || 0;
@@ -414,7 +431,7 @@
   }
 
   window.__harbor = {
-    state: function () { return { biome: biomeId, era: era, founded: !!founded[biomeId], port: founded[biomeId] || null, worlds: HARBOR_BIOME_ORDER.slice(), unlocked: unlocked.slice(), city: scene.city.length, crane: scene.crane, assets: !!(cityModels && atlasTex), tod: Math.round(tod * 1000) / 1000, cam: { az: +C.az.toFixed(2), el: +C.el.toFixed(2), dist: Math.round(C.dist) }, webgl: !!gl, phase: 'world-4.0' }; },
+    state: function () { return { biome: biomeId, era: era, founded: !!founded[biomeId], port: founded[biomeId] || null, worlds: HARBOR_BIOME_ORDER.slice(), unlocked: unlocked.slice(), city: scene.city.length, crane: scene.crane, assets: !!(cityModels && atlasTex), tod: Math.round(tod * 1000) / 1000, cam: { az: +C.az.toFixed(2), el: +C.el.toFixed(2), dist: Math.round(C.dist), tx: Math.round(C.tx), tz: Math.round(C.tz) }, webgl: !!gl, phase: 'world-4.1' }; },
     setBiome: function (id) { if (E) buildBiome(id); }, setTod: function (t) { tod = t % 1; }, pause: function (p) { paused = !!p; },
     setEra: function (n) { era = Math.max(0, n | 0); if (window.Retention) Retention.set(GAME, 'era', era); if (E) buildBiome(biomeId); },
     foundPort: function (x, z) { if (E) foundHere(x, z); }, autoFound: function () { if (E) autoFound(); }, rate: function (x, z) { return HARBOR_MODELS.rate(x, z); },

@@ -18,7 +18,7 @@
   var CONT = [[0.95, 0.32, 0.26], [0.20, 0.62, 0.86], [1.0, 0.78, 0.24], [0.28, 0.76, 0.48], [0.64, 0.42, 0.82], [0.98, 0.54, 0.64], [0.96, 0.96, 0.98]];
 
   // ---------------- value-noise heightfield ----------------
-  var WORLD = { W: 760, z0: -130, z1: 430, cell: 5 };
+  var WORLD = { W: 2400, z0: -130, z1: 430, cell: 5 };
   var FIELD = null;
   function h2(ix, iz) { var n = (ix * 374761393 + iz * 668265263) | 0; n = Math.imul(n ^ (n >>> 13), 1274126177); return ((n ^ (n >>> 16)) >>> 0) / 4294967296; }
   function vnoise(x, z) {
@@ -117,15 +117,13 @@
     }
   }
   function landforms(flat, b, rng) {
-    var rings = [{ n: 8, d0: 150, dr: 70, s0: 1.0, sr: 0.9 }, { n: 7, d0: 240, dr: 90, s0: 1.3, sr: 1.1 }];
-    rings.forEach(function (R) {
-      for (var i = 0; i < R.n; i++) {
-        var ang = -1.35 + (i / (R.n - 1)) * 2.7, dist = R.d0 + rng() * R.dr;
-        var cx = Math.sin(ang) * dist, cz = 150 + Math.cos(ang) * dist * 0.45 + rng() * 30, s = R.s0 + rng() * R.sr;
-        var tmp = new g.HGL.Builder(); landform(tmp, b, s, rng);
-        flat.addXform(tmp, cx, Math.max(0, heightAt(cx, cz)) - 1, cz, rng() * TAU);
-      }
-    });
+    var span = WORLD.W * 0.46, n = Math.round(WORLD.W / 95);   // spread across the long coast
+    for (var i = 0; i < n; i++) {
+      var cx = -span + (i + rng()) / n * span * 2;
+      var cz = 150 + rng() * 170, s = 0.9 + rng() * 1.3;       // inland band, varied size
+      var tmp = new g.HGL.Builder(); landform(tmp, b, s, rng);
+      flat.addXform(tmp, cx, Math.max(0, heightAt(cx, cz)) - 1, cz, rng() * TAU);
+    }
   }
 
   // ---------------- port structures (LOCAL origin: water toward -z, land +z) ----------------
@@ -234,8 +232,9 @@
     buildFieldMesh(B.flat, biome);
     landforms(B.flat, biome, rng);
     if (biome.veg !== 'none') {
-      for (var v = 0; v < biome.vegN + 14; v++) {
-        var x = -300 + rng() * 600, z = 40 + rng() * 280, y = heightAt(x, z);
+      var nv = Math.round((biome.vegN + 14) * WORLD.W / 760), hw = WORLD.W * 0.48;
+      for (var v = 0; v < nv; v++) {
+        var x = -hw + rng() * hw * 2, z = 40 + rng() * 300, y = heightAt(x, z);
         if (y < 1.0 || y > 16) continue;                 // only on dry, non-peak land
         if (port && Math.abs(x - port.x) < 50 && Math.abs(z - port.z) < 50) continue;
         tree(B.flat, x, z, rng, biome.veg, y);
