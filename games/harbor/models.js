@@ -34,7 +34,8 @@
   // (Portsmouth/Falmouth-style indentations cutting into the land).
   var ISLAND = { cx: 0, cz: 150, ax: 560, az: 270 };
   var BAY = { x: 30, z: -55, r: 175, depth: 1.0 };                            // the one big, obvious natural harbour (front)
-  var MTN = { x: 0, z: 180, ax: 0.52, az: 0.52, h: 66 };                      // central snow-capped massif
+  var PLAIN = { x: 30, z: 45, ax: 340, az: 185, h: 3.2 };                     // flat, buildable apron behind the bay (room to expand huge)
+  var MTN = { x: 0, z: 205, ax: 0.50, az: 0.46, h: 66 };                      // central snow-capped massif (pushed back to clear the harbour plain)
   var RIVERS = null;
   function isleCoves(seed) {
     var coves = [[BAY.x, BAY.z, BAY.r, BAY.depth]];                           // big harbour bay first
@@ -97,6 +98,8 @@
             h += Math.pow(mt, 1.55) * MTN.h * (0.30 + 0.95 * rg) * (0.9 + hilly * 0.1);
           }
           h += (fbm(x * 0.020 + seed * 2, z * 0.020 + 3.3) - 0.5) * 11 * hilly * clamp(e * 3, 0, 1); // rolling hills
+          var pr = Math.hypot((x - PLAIN.x) / PLAIN.ax, (z - PLAIN.z) / PLAIN.az);   // flatten the harbour expansion apron
+          if (pr < 1) { var pk = (1 - pr); pk = pk * pk * 0.92; h = h * (1 - pk) + PLAIN.h * pk; }
           var rv = riverDist(x, z);                                                  // carve winding rivers
           if (rv.d < rv.w) { var rt = rv.d / rv.w; h = Math.min(h, -0.5 + rt * rt * 4); RM[j * nx + i] = 1; }
         }
@@ -150,9 +153,9 @@
   // ---------------- vegetation (grounded on the field) ----------------
   function tree(flat, x, z, rng, kind, by) {
     var hy = by + 0.4;
-    if (kind === 'palm') { var th = 5 + rng() * 3; flat.cyl(x, hy, z, 0.35, th, 6, [0.45, 0.34, 0.22], 0.7); for (var f = 0; f < 6; f++) flat.box(x, hy + th, z, 4.2, 0.3, 1.0, [0.22, 0.62, 0.26], f / 6 * TAU, 0.32); }
-    else if (kind === 'pine') { flat.cyl(x, hy, z, 0.5, 2, 6, [0.40, 0.30, 0.20], 1); for (var c = 0; c < 3; c++) flat.cyl(x, hy + 1.5 + c * 2.2, z, 3 - c * 0.8, 2.6, 6, [0.16, 0.44, 0.26], 0.04); }
-    else { flat.cyl(x, hy, z, 0.6, 2.4, 6, [0.42, 0.31, 0.2], 1); flat.cyl(x, hy + 2.2, z, 3.0, 4.2, 7, [0.26, 0.60, 0.30], 0.25); }
+    if (kind === 'palm') { var th = 5 + rng() * 3; flat.cyl(x, hy, z, 0.35, th, 6, [0.45, 0.34, 0.22], 0.7); for (var f = 0; f < 6; f++) flat.box(x, hy + th, z, 4.2, 0.3, 1.0, [0.16, 0.46, 0.20], f / 6 * TAU, 0.32); }
+    else if (kind === 'pine') { flat.cyl(x, hy, z, 0.5, 2, 6, [0.36, 0.27, 0.18], 1); for (var c = 0; c < 3; c++) flat.cyl(x, hy + 1.5 + c * 2.2, z, 3 - c * 0.8, 2.6, 6, [0.12, 0.34, 0.19], 0.04); }
+    else { flat.cyl(x, hy, z, 0.6, 2.4, 6, [0.38, 0.28, 0.18], 1); flat.cyl(x, hy + 2.2, z, 3.0, 4.2, 7, [0.18, 0.44, 0.20], 0.25); }
   }
 
   // ---------------- distant landforms (built at origin, baked onto the field) ----------------
@@ -317,6 +320,8 @@
         var x = -hw + rng() * hw * 2, z = -120 + rng() * 560, y = heightAt(x, z);
         if (y < 1.1 || y > 28) continue;                 // dry land below the rock line
         if (port && Math.abs(x - port.x) < 46 && Math.abs(z - port.z) < 46) continue;
+        var pr = Math.hypot((x - PLAIN.x) / (PLAIN.ax * 0.82), (z - PLAIN.z) / (PLAIN.az * 0.82));
+        if (pr < 1 && rng() < 0.82) continue;            // keep the harbour apron mostly clear for building
         tree(B.flat, x, z, rng, biome.veg, y);
       }
     }
