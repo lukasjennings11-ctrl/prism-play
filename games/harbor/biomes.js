@@ -8,7 +8,7 @@
   g.HARBOR_BIOMES = {
     green: {
       id: 'green', name: 'Green Isles', unlockEra: 0, unlockLabel: 'Starting world',
-      ground: [0.40, 0.58, 0.26], hill: [0.30, 0.52, 0.22], hillType: 'hill', snow: false,
+      ground: [0.21, 0.38, 0.14], hill: [0.16, 0.32, 0.13], hillType: 'hill', snow: false,
       deep: [0.04, 0.20, 0.30], shallow: [0.12, 0.46, 0.52],
       skyTop: [0.30, 0.60, 0.94], skyBot: [0.80, 0.92, 1.0], sun: [1.35, 1.24, 1.04], fog: [0.82, 0.91, 0.99], veg: 'tree', vegN: 26, hilliness: 1.0, beach: [0.90, 0.84, 0.62],
       build: { wall: [[0.80, 0.36, 0.30], [0.86, 0.62, 0.34], [0.74, 0.70, 0.58], [0.62, 0.66, 0.72], [0.88, 0.80, 0.62]], roof: [0.58, 0.22, 0.18], roofStyle: 'pitch', trim: [0.95, 0.93, 0.88] }
@@ -29,7 +29,7 @@
     },
     tropical: {
       id: 'tropical', name: 'Tropical', unlockEra: 3, unlockLabel: 'Unlocks: Metropolis era',
-      ground: [0.50, 0.68, 0.30], hill: [0.34, 0.58, 0.28], hillType: 'hill', snow: false,
+      ground: [0.34, 0.52, 0.22], hill: [0.24, 0.46, 0.22], hillType: 'hill', snow: false,
       deep: [0.0, 0.46, 0.54], shallow: [0.14, 0.78, 0.74],
       skyTop: [0.24, 0.66, 0.96], skyBot: [0.88, 0.97, 1.0], sun: [1.42, 1.30, 1.08], fog: [0.88, 0.97, 1.0], veg: 'palm', vegN: 24, hilliness: 0.8, beach: [0.97, 0.93, 0.74],
       build: { wall: [[0.96, 0.94, 0.90], [0.96, 0.78, 0.66], [0.70, 0.88, 0.86], [0.96, 0.86, 0.50]], roof: [0.40, 0.52, 0.60], roofStyle: 'hip', trim: [0.30, 0.66, 0.66] }
