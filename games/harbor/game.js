@@ -574,7 +574,51 @@
   function simReady() { return SIM && SIM.raw && SIM.raw() && SIM.raw().founded; }
   function fmt(n) { n = n | 0; if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M'; if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k'; return '' + n; }
 
-  var eraBar = null, muteBtn = null;
+  var eraBar = null, muteBtn = null, goalBanner = null;
+  var statFlags = { orders: 0 };                              // session counters for objectives
+  // guided objective ladder — each completes once, pays a small reward + juice, then reveals the next
+  var GOALS = [
+    { t: 'Build a Fishing Hut', ok: function (s) { return (s.counts.fishing_hut || 0) >= 1; }, r: 30 },
+    { t: 'House a crew — build a Cottage', ok: function (s) { return (s.counts.cottage || 0) >= 1; }, r: 40 },
+    { t: 'Sell your catch — build a Jetty', ok: function (s) { return (s.counts.jetty || 0) >= 1; }, r: 60 },
+    { t: 'Bank £250', ok: function (s) { return s.money >= 250; }, r: 80 },
+    { t: 'Advance to the Trading Post', ok: function (s) { return s.era >= 1; }, r: 120 },
+    { t: 'Fulfil a harbour Order', ok: function () { return statFlags.orders >= 1; }, r: 120 },
+    { t: 'Store more — build a Warehouse', ok: function (s) { return (s.counts.warehouse || 0) >= 1; }, r: 150 },
+    { t: 'Hire your first Manager', ok: function (s) { return mgrTotal(s) >= 1; }, r: 180 },
+    { t: 'Open a Fish Market', ok: function (s) { return (s.counts.market || 0) >= 1; }, r: 240 },
+    { t: 'Rise to the Industrial Port', ok: function (s) { return s.era >= 2; }, r: 500 },
+    { t: 'Build a Sawmill', ok: function (s) { return (s.counts.sawmill || 0) >= 1; }, r: 500 },
+    { t: 'Manufacture goods — build a Factory', ok: function (s) { return (s.counts.factory || 0) >= 1; }, r: 700 },
+    { t: 'Ship cargo — build a Cargo Dock', ok: function (s) { return (s.counts.dock || 0) >= 1; }, r: 900 },
+    { t: 'Grow into a Metropolis', ok: function (s) { return s.era >= 3; }, r: 2000 }
+  ];
+  var goalIdx = 0;
+  function mgrTotal(s) { var n = 0, m = s.managers || {}; for (var k in m) n += m[k].lvl || 0; return n; }
+  function loadGoal() { var g = window.Retention && Retention.get(GAME, 'goal', null); goalIdx = (g && typeof g.i === 'number') ? g.i : 0; }
+  function saveGoal() { if (window.Retention) Retention.set(GAME, 'goal', { i: goalIdx }); }
+  function setGoalText(s) {
+    if (!goalBanner) return;
+    if (goalIdx >= GOALS.length) { goalBanner.querySelector('.gb-text').textContent = 'Port master — every goal complete!'; goalBanner.querySelector('.gb-rew').textContent = ''; return; }
+    var g = GOALS[goalIdx];
+    goalBanner.querySelector('.gb-text').textContent = g.t;
+    goalBanner.querySelector('.gb-rew').textContent = '+£' + fmt(g.r);
+  }
+  function checkGoals(s) {
+    if (!goalBanner || !s) return;
+    goalBanner.classList.toggle('show', simReady() && !cine);
+    if (goalIdx >= GOALS.length) { setGoalText(s); return; }
+    var g = GOALS[goalIdx];
+    if (g.ok(s)) {
+      if (SIM.raw()) { SIM.raw().money += g.r; SIM.save(); }
+      var pw = portWorld(); popWorld(pw.x, pw.y + 9, pw.z, 'Goal! +£' + fmt(g.r), { color: '#9ef0b0', size: 18, life: 1.5 });
+      burstWorld(pw.x, pw.y, pw.z, { count: 22, colors: ['#9ef0b0', '#fff3c4', '#bfe9ff'], speed: 180, life: 1.0 });
+      sfx('score'); haptic(22); shakeFX(3, 0.25);
+      goalBanner.classList.add('hit'); setTimeout(function () { goalBanner && goalBanner.classList.remove('hit'); }, 500);
+      goalIdx++; saveGoal();
+    }
+    setGoalText(s);
+  }
   function buildEconUI() {
     econHud = document.createElement('div'); econHud.id = 'econhud';
     function chip(id, icon) { var s = document.createElement('span'); s.className = 'estat'; s.innerHTML = '<b>' + icon + '</b><i id="' + id + '">0</i>'; econHud.appendChild(s); return s.querySelector('i'); }
@@ -590,6 +634,11 @@
     eraBar = document.createElement('div'); eraBar.id = 'erabar';
     eraBar.innerHTML = '<div class="eb-fill"></div><div class="eb-label"></div><div class="eb-need"></div>';
     wrap.appendChild(eraBar);
+
+    // guided objective banner — the "what next" carrot that makes early progress legible
+    goalBanner = document.createElement('div'); goalBanner.id = 'goalbar';
+    goalBanner.innerHTML = '<span class="gb-tick">◎</span><span class="gb-text"></span><span class="gb-rew"></span>';
+    wrap.appendChild(goalBanner);
 
     managePanel = document.createElement('div'); managePanel.id = 'managepanel';
     wrap.appendChild(managePanel);
@@ -623,6 +672,7 @@
     // glow the Manage button when an order is ready to deliver
     var mBtn = document.getElementById('managebtn');
     if (mBtn) { var ready = (s.contracts || []).some(function (c) { return c.can; }); mBtn.classList.toggle('order-ready', ready && !manageOpen); }
+    checkGoals(s);
     if (manageOpen) renderManage();
   }
   function toggleManage() { manageOpen = !manageOpen; managePanel.classList.toggle('show', manageOpen); if (manageOpen) renderManage(); }
@@ -682,7 +732,7 @@
     managePanel.querySelectorAll('[data-build]').forEach(function (el) { el.addEventListener('click', function () { var id = el.getAttribute('data-build'); var t = SIM.BT[id]; if (SIM.build(id)) { plopFeedback(t ? t.era + 1 : 1, t ? t.name : 'Built'); checkMilestones(); updateHUD(); renderManage(); } else sfx('lose'); }); });
     managePanel.querySelectorAll('[data-up]').forEach(function (el) { el.addEventListener('click', function () { var i = +el.getAttribute('data-up'); if (SIM.canUpgrade(i)) { var lv = SIM.raw().buildings[i].level; SIM.upgrade(i); plopFeedback(lv + 1, 'Upgraded'); updateHUD(); renderManage(); } else sfx('lose'); }); });
     managePanel.querySelectorAll('[data-mgr]').forEach(function (el) { el.addEventListener('click', function () { var k = el.getAttribute('data-mgr'); if (SIM.buyManager(k)) { plopFeedback(2, 'Hired!'); sfx('merge'); haptic(20); updateHUD(); renderManage(); } else sfx('lose'); }); });
-    managePanel.querySelectorAll('[data-order]').forEach(function (el) { el.addEventListener('click', function () { var id = el.getAttribute('data-order'); var paid = SIM.fulfillContract(id); if (paid > 0) { var pw = portWorld(); if (pw) { popWorld(pw.x, pw.y + 7, pw.z, '+£' + fmt(paid), { color: '#ffe08a', size: 22, life: 1.4, vy: -56 }); burstWorld(pw.x, pw.y, pw.z, { count: 30, colors: ['#ffe08a', '#fff3c4', '#ffd24a'], speed: 200, life: 1.0, size: 5 }); } shakeFX(5, 0.3); sfx('win'); haptic(30); confettiBurst(); updateHUD(); renderManage(); } else sfx('lose'); }); });
+    managePanel.querySelectorAll('[data-order]').forEach(function (el) { el.addEventListener('click', function () { var id = el.getAttribute('data-order'); var paid = SIM.fulfillContract(id); if (paid > 0) { statFlags.orders++; var pw = portWorld(); if (pw) { popWorld(pw.x, pw.y + 7, pw.z, '+£' + fmt(paid), { color: '#ffe08a', size: 22, life: 1.4, vy: -56 }); burstWorld(pw.x, pw.y, pw.z, { count: 30, colors: ['#ffe08a', '#fff3c4', '#ffd24a'], speed: 200, life: 1.0, size: 5 }); } shakeFX(5, 0.3); sfx('win'); haptic(30); confettiBurst(); updateHUD(); renderManage(); } else sfx('lose'); }); });
   }
   // build/upgrade "plop": shake + dust burst + ascending pitch + haptic + popup at the port
   function plopFeedback(tier, label) {
@@ -721,7 +771,7 @@
     boxMesh = E.mesh(new HGL.Builder().box(0, 0, 0, 1, 1, 1, [1, 1, 1]).data());
     waterMesh = E.mesh(E.plane(2900, 300)); facTex = E.texture(facadeTexture()); gritTex = E.texture(gritTexture()); blobTex = E.texture(blobTexture());
     loadAssets();
-    loadUnlocked(); loadFounded();
+    loadUnlocked(); loadFounded(); loadGoal();
     var offGain = 0, offSec = 0;
     if (SIM) { SIM.load(); if (SIM.raw().founded) { var m0 = SIM.raw().money; offSec = SIM.applyOffline(8 * 3600); offGain = SIM.raw().money - m0; era = SIM.raw().era; } }
     if (SIM && SIM.raw()) { hudShownMoney = prevMoney = SIM.raw().money; }
@@ -770,6 +820,7 @@
     sites: function () { return sites.slice(); }, selectSite: function (i) { if (E) selectSite(i); }, groundAt: function (sx, sy) { return screenToGround(sx, sy); },
     unlockWorld: function (id) { unlockWorld(id); },
     ambient: function () { if (scene.port && !ambient) buildAmbient(); return ambient ? { boats: ambient.boats.length, gulls: ambient.gulls.length, cx: Math.round(ambient.cx), cz: Math.round(ambient.cz), seaH: Math.round(HARBOR_MODELS.heightAt(ambient.cx, ambient.cz) * 10) / 10 } : null; },
+    goal: function () { return { i: goalIdx, total: GOALS.length, text: goalIdx < GOALS.length ? GOALS[goalIdx].t : 'done', shown: goalBanner ? goalBanner.classList.contains('show') : false }; },
     unlockAll: function () { HARBOR_BIOME_ORDER.forEach(function (id) { if (unlocked.indexOf(id) < 0) unlocked.push(id); }); saveUnlocked(); if (buildSelector._set) buildSelector._set(); }
   };
 
