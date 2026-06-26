@@ -63,6 +63,7 @@
   function buildBiome(id) {
     if (!HARBOR_BIOMES[id]) id = 'green';
     biomeId = id; biome = HARBOR_BIOMES[id];
+    if (simReady() && founded[id]) era = SIM.raw().era;            // sim is the authority on era when founded
     var rng = mulberry(hash('harbor:' + id + ':e' + era));
     var fac = new HGL.Builder(), grit = new HGL.Builder(), flat = new HGL.Builder();
     var port = founded[id] || null;
@@ -78,8 +79,10 @@
   function foundHere(x, z, yaw) {
     if (yaw == null) yaw = HARBOR_MODELS.portYaw(x, z);
     founded[biomeId] = { x: x, z: z, yaw: yaw }; saveFounded();
+    if (SIM) { if (!SIM.raw() || !SIM.raw().founded) SIM.newGame(); SIM.setFounded(true); era = SIM.raw().era; }  // start the port economy
     buildBiome(biomeId);
     C.txT = x; C.tzT = z; C.distT = 130; C.elT = 0.5;        // frame the new harbour
+    if (typeof updateHUD === 'function') updateHUD();
   }
 
   // ---- glTF city assets (loaded once, async; procedural scene renders meanwhile) ----
@@ -359,6 +362,12 @@
     var k = Math.min(1, dt * 11); C.az += (C.azT - C.az) * k; C.el += (C.elT - C.el) * k; C.dist += (C.distT - C.dist) * Math.min(1, dt * 9);
     C.tx += (C.txT - C.tx) * k; C.tz += (C.tzT - C.tz) * k;
     if (clockEl) { var hh = Math.floor(tod * 24), mm = Math.floor((tod * 24 % 1) * 60); clockEl.textContent = ('0' + hh).slice(-2) + ':' + ('0' + mm).slice(-2); }
+    // economy tick (founded ports earn over time)
+    if (!paused && simReady()) {
+      SIM.tick(dt);
+      frame._hud = (frame._hud || 0) + dt; if (frame._hud > 0.2) { updateHUD(); frame._hud = 0; }
+      frame._sv = (frame._sv || 0) + dt; if (frame._sv > 5) { SIM.mark(); frame._sv = 0; }
+    }
     render(); requestAnimationFrame(frame);
   }
 
@@ -422,6 +431,74 @@
     wrap.appendChild(foundPanel); buildSiteChips(); updateFoundUI();
   }
 
+  // ---- economy HUD + port management ----
+  var econHud = null, hudMoney = null, hudFish = null, hudPop = null, advBtn = null, managePanel = null, manageOpen = false;
+  var SIM = window.HARBOR_SIM || null;
+  function simReady() { return SIM && SIM.raw && SIM.raw() && SIM.raw().founded; }
+  function fmt(n) { n = n | 0; if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M'; if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k'; return '' + n; }
+
+  function buildEconUI() {
+    econHud = document.createElement('div'); econHud.id = 'econhud';
+    function chip(id, icon) { var s = document.createElement('span'); s.className = 'estat'; s.innerHTML = '<b>' + icon + '</b><i id="' + id + '">0</i>'; econHud.appendChild(s); return s.querySelector('i'); }
+    hudMoney = chip('e-money', '£'); hudFish = chip('e-fish', 'Fish'); hudPop = chip('e-pop', 'Crew');
+    var mBtn = document.createElement('button'); mBtn.id = 'managebtn'; mBtn.textContent = 'Manage port'; mBtn.addEventListener('click', toggleManage);
+    advBtn = document.createElement('button'); advBtn.id = 'advbtn'; advBtn.textContent = 'Advance era'; advBtn.style.display = 'none'; advBtn.addEventListener('click', doAdvance);
+    econHud.appendChild(advBtn); econHud.appendChild(mBtn);
+    wrap.appendChild(econHud);
+
+    managePanel = document.createElement('div'); managePanel.id = 'managepanel';
+    wrap.appendChild(managePanel);
+    updateHUD();
+  }
+  function popup(txt) { try { if (window.Juice && Juice.Popups) Juice.Popups.spawn ? Juice.Popups.spawn(txt) : 0; } catch (e) {} }
+
+  function updateHUD() {
+    if (!econHud) return;
+    var on = simReady();
+    econHud.classList.toggle('show', on);
+    if (!on) { if (managePanel) managePanel.classList.remove('show'); return; }
+    var s = SIM.state();
+    hudMoney.textContent = fmt(s.money); hudFish.textContent = fmt(s.res.fish); hudPop.textContent = fmt(s.pop);
+    if (clockEl) {} // clock stays
+    var pill = document.getElementById('era-pill'); if (pill) pill.textContent = s.eraName;
+    advBtn.style.display = s.canAdvance ? '' : 'none';
+    advBtn.textContent = s.nextEra ? 'Advance → ' + s.nextEra : 'Advance era';
+    if (manageOpen) renderManage();
+  }
+  function toggleManage() { manageOpen = !manageOpen; managePanel.classList.toggle('show', manageOpen); if (manageOpen) renderManage(); }
+  function renderManage() {
+    if (!simReady()) { managePanel.classList.remove('show'); manageOpen = false; return; }
+    var s = SIM.state(), BT = SIM.BT, html = '<div class="mp-head">Build & upgrade<button id="mp-close">✕</button></div>';
+    html += '<div class="mp-sec">New buildings</div><div class="mp-grid">';
+    Object.keys(BT).forEach(function (id) {
+      var t = BT[id]; if (s.era < t.era) return;                    // hide future-era types
+      var cost = SIM.buildCost(id), can = SIM.canBuild(id);
+      html += '<button class="mp-item" data-build="' + id + '"' + (can ? '' : ' disabled') + '><span class="mi-n">' + t.name + '</span><span class="mi-c">£' + fmt(cost) + '</span></button>';
+    });
+    html += '</div>';
+    if (s.buildings.length) {
+      html += '<div class="mp-sec">Your port (' + s.buildings.length + ')</div><div class="mp-grid">';
+      s.buildings.forEach(function (b) {
+        var can = SIM.canUpgrade(b.i);
+        html += '<button class="mp-item up" data-up="' + b.i + '"' + (can ? '' : ' disabled') + '><span class="mi-n">' + b.name + ' L' + b.level + '</span><span class="mi-c">↑£' + fmt(b.up) + '</span></button>';
+      });
+      html += '</div>';
+    }
+    managePanel.innerHTML = html;
+    managePanel.querySelector('#mp-close').addEventListener('click', toggleManage);
+    managePanel.querySelectorAll('[data-build]').forEach(function (el) { el.addEventListener('click', function () { if (SIM.build(el.getAttribute('data-build'))) { popup('Built'); updateHUD(); renderManage(); } }); });
+    managePanel.querySelectorAll('[data-up]').forEach(function (el) { el.addEventListener('click', function () { if (SIM.upgrade(+el.getAttribute('data-up'))) { updateHUD(); renderManage(); } }); });
+  }
+  function doAdvance() {
+    if (!SIM.canAdvance()) return;
+    SIM.advanceEra(); era = SIM.raw().era;
+    var ni = HARBOR_BIOME_ORDER.indexOf(biomeId) >= 0 ? era : -1;   // unlock the world matching the new era, if any
+    HARBOR_BIOME_ORDER.forEach(function (id) { if (HARBOR_BIOMES[id].unlockEra <= era) unlockWorld(id); });
+    buildBiome(biomeId);                                            // regrow the port at the new era
+    showHint('Ascended to ' + SIM.state().eraName + '!');
+    updateHUD();
+  }
+
   function boot() {
     if (window.Portal) Portal.loadingStart();
     if (!gl) { if (loader) loader.innerHTML = '<div style="color:#fff;font-family:sans-serif;padding:20px;text-align:center">WebGL2 is required to play HARBOR.</div>'; return; }
@@ -431,11 +508,12 @@
     waterMesh = E.mesh(E.plane(2900, 300)); facTex = E.texture(facadeTexture()); gritTex = E.texture(gritTexture()); blobTex = E.texture(blobTexture());
     loadAssets();
     loadUnlocked(); loadFounded();
-    era = (window.Retention && Retention.get(GAME, 'era', 0) | 0) || 0;
+    if (SIM) { SIM.load(); if (SIM.raw().founded) { SIM.applyOffline(8 * 3600); era = SIM.raw().era; } }
+    if (!(SIM && SIM.raw() && SIM.raw().founded)) era = (window.Retention && Retention.get(GAME, 'era', 0) | 0) || 0;
     var saved = window.Retention && Retention.get(GAME, 'biome', null);
     if (saved && !isUnlocked(saved)) saved = null;
     buildBiome(saved || 'green');
-    resize(); defaultView(); C.dist = C.distT; C.tx = C.txT; C.tz = C.tzT; buildSelector(); buildFoundUI();
+    resize(); defaultView(); C.dist = C.distT; C.tx = C.txT; C.tz = C.tzT; buildSelector(); buildFoundUI(); buildEconUI();
     try { var q = window.location.search; var m;
       if ((m = /[?&]era=(\d+)/.exec(q))) { era = +m[1] | 0; }
       if ((m = /[?&]biome=(\w+)/.exec(q))) { buildBiome(m[1]); buildSelector._set && buildSelector._set(); }
@@ -461,7 +539,8 @@
   window.__harbor = {
     state: function () { return { biome: biomeId, era: era, founded: !!founded[biomeId], port: founded[biomeId] || null, sites: sites.length, sel: selSite, worlds: HARBOR_BIOME_ORDER.slice(), unlocked: unlocked.slice(), city: scene.city.length, crane: scene.crane, assets: !!(cityModels && atlasTex), tod: Math.round(tod * 1000) / 1000, cam: { az: +C.az.toFixed(2), el: +C.el.toFixed(2), dist: Math.round(C.dist), tx: Math.round(C.tx), tz: Math.round(C.tz) }, webgl: !!gl, phase: 'world-4.3' }; },
     setBiome: function (id) { if (E) buildBiome(id); }, setTod: function (t) { tod = t % 1; }, pause: function (p) { paused = !!p; },
-    setEra: function (n) { era = Math.max(0, n | 0); if (window.Retention) Retention.set(GAME, 'era', era); if (E) buildBiome(biomeId); },
+    setEra: function (n) { era = Math.max(0, n | 0); if (SIM && SIM.raw() && SIM.raw().founded) SIM.setEra(era); if (window.Retention) Retention.set(GAME, 'era', era); if (E) { buildBiome(biomeId); updateHUD(); } },
+    econ: function () { return SIM ? SIM.state() : null; },
     foundPort: function (x, z) { if (E) foundHere(x, z); }, autoFound: function () { if (E) autoFound(); }, rate: function (x, z) { return HARBOR_MODELS.rate(x, z); },
     sites: function () { return sites.slice(); }, selectSite: function (i) { if (E) selectSite(i); }, groundAt: function (sx, sy) { return screenToGround(sx, sy); },
     unlockWorld: function (id) { unlockWorld(id); },
