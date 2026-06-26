@@ -589,10 +589,32 @@
       });
       html += '</div>';
     }
+    // managers: permanent multipliers — a real money sink that defines your port's strengths
+    if (s.managers) {
+      html += '<div class="mp-sec">Managers</div><div class="mp-grid">';
+      Object.keys(s.managers).forEach(function (k) {
+        var m = s.managers[k], maxed = m.lvl >= m.max;
+        html += '<button class="mp-item mgr" data-mgr="' + k + '"' + ((m.can && !maxed) ? '' : ' disabled') + '>' +
+          '<span class="mi-n">' + m.name + ' <i class="mi-lv">L' + m.lvl + '</i></span>' +
+          '<span class="mi-d">' + m.desc + '</span>' +
+          '<span class="mi-c">' + (maxed ? 'MAX' : '£' + fmt(m.cost)) + '</span></button>';
+      });
+      html += '</div>';
+    }
+    // demand strip: shows how saturated each market is (lower = you're flooding it)
+    if (s.demand) {
+      html += '<div class="mp-sec">Market demand</div><div class="mp-dem">';
+      [['fish', 'Fish'], ['timber', 'Timber'], ['goods', 'Goods']].forEach(function (d) {
+        var v = Math.round((s.demand[d[0]] || 1) * 100);
+        html += '<div class="dem-i"><span class="dem-n">' + d[1] + '</span><span class="dem-bar"><i style="width:' + v + '%"></i></span><span class="dem-v">' + v + '%</span></div>';
+      });
+      html += '</div>';
+    }
     managePanel.innerHTML = html;
     managePanel.querySelector('#mp-close').addEventListener('click', toggleManage);
     managePanel.querySelectorAll('[data-build]').forEach(function (el) { el.addEventListener('click', function () { var id = el.getAttribute('data-build'); var t = SIM.BT[id]; if (SIM.build(id)) { plopFeedback(t ? t.era + 1 : 1, t ? t.name : 'Built'); checkMilestones(); updateHUD(); renderManage(); } else sfx('lose'); }); });
     managePanel.querySelectorAll('[data-up]').forEach(function (el) { el.addEventListener('click', function () { var i = +el.getAttribute('data-up'); if (SIM.canUpgrade(i)) { var lv = SIM.raw().buildings[i].level; SIM.upgrade(i); plopFeedback(lv + 1, 'Upgraded'); updateHUD(); renderManage(); } else sfx('lose'); }); });
+    managePanel.querySelectorAll('[data-mgr]').forEach(function (el) { el.addEventListener('click', function () { var k = el.getAttribute('data-mgr'); if (SIM.buyManager(k)) { plopFeedback(2, 'Hired!'); sfx('merge'); haptic(20); updateHUD(); renderManage(); } else sfx('lose'); }); });
   }
   // build/upgrade "plop": shake + dust burst + ascending pitch + haptic + popup at the port
   function plopFeedback(tier, label) {
