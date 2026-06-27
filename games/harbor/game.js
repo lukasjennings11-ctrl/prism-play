@@ -102,7 +102,7 @@
   function foundHere(x, z, yaw) {
     if (yaw == null) yaw = HARBOR_MODELS.portYaw(x, z);
     founded[biomeId] = { x: x, z: z, yaw: yaw }; saveFounded();
-    if (SIM) { SIM.foundPort(biomeId); era = SIM.raw().era; }      // start this world's port economy
+    if (SIM) { SIM.foundPort(biomeId); era = SIM.raw().era; if (typeof bumpDaily === 'function') bumpDaily('found'); }   // start this world's port economy
     buildBiome(biomeId);
     C.txT = x; C.tzT = z; C.distT = 130; C.elT = 0.5;        // frame the new harbour
     if (typeof updateHUD === 'function') updateHUD();
@@ -812,7 +812,7 @@
     // a fresh strike fired in the sim — react with juice
     if (hz.strikeId && hz.strikeId !== lastStrikeId) {
       lastStrikeId = hz.strikeId; var last = hz.last;
-      shakeFX(11, 0.7); flashT = 0.85; sfx('lose'); haptic([10, 50, 20]);
+      shakeFX(11, 0.7); flashT = 0.85; sfx('lose'); haptic([10, 50, 20]); bumpDaily('storm');
       if (last && last.crash) { showHint('Market crash — ' + last.res + ' prices slump'); }
       else if (last) {
         showHint((last.kind || 'Storm') + ' hit ' + wname(last.port) + '! ' + last.damaged + ' building' + (last.damaged === 1 ? '' : 's') + ' damaged');
@@ -906,6 +906,58 @@
     tree.querySelectorAll('[data-leg]').forEach(function (el) { el.addEventListener('click', function () { if (buyLegacy(el.getAttribute('data-leg'))) { sfx('merge'); haptic(16); renderLegacy(); updateHUD(); } else sfx('lose'); }); });
   }
 
+  // ---- Daily cadence: rotating market tide, daily missions, login streak (reuses Progress/Retention) ----
+  var TIDES = [
+    { name: 'Fish Boom', desc: '+60% fish prices today', tide: { prod: 1, sell: { fish: 1.6 } } },
+    { name: 'Timber Boom', desc: '+60% timber prices today', tide: { prod: 1, sell: { timber: 1.6 } } },
+    { name: 'Goods Boom', desc: '+60% goods prices today', tide: { prod: 1, sell: { goods: 1.6 } } },
+    { name: 'Calm Seas', desc: '+30% production today', tide: { prod: 1.3, sell: {} } },
+    { name: 'Busy Docks', desc: '+25% all sales today', tide: { prod: 1, sell: { fish: 1.25, timber: 1.25, goods: 1.25 } } },
+    { name: 'Fair Winds', desc: '+20% production & sales today', tide: { prod: 1.2, sell: { fish: 1.2, timber: 1.2, goods: 1.2 } } }
+  ];
+  function todayTide() { var seed = (window.Retention ? Retention.dailySeed(GAME) : 0); return TIDES[seed % TIDES.length]; }
+  function applyTide() { if (SIM && SIM.setTide) SIM.setTide(todayTide().tide); }
+  var DAILY_POOL = [
+    { id: 'earn', text: 'Earn £25k today', target: 25000, reward: 2 },
+    { id: 'build', text: 'Build 8 structures', target: 8, reward: 2 },
+    { id: 'order', text: 'Fulfil 4 harbour orders', target: 4, reward: 3 },
+    { id: 'ship', text: 'Ship 250 cargo', target: 250, reward: 3 },
+    { id: 'storm', text: 'Weather 2 storms', target: 2, reward: 3 },
+    { id: 'upgrade', text: 'Upgrade 6 buildings', target: 6, reward: 2 },
+    { id: 'found', text: 'Found a new harbour', target: 1, reward: 4 },
+    { id: 'manager', text: 'Hire 3 managers', target: 3, reward: 2 }
+  ];
+  function dailyList() { return window.Progress ? Progress.dailyMissions(GAME, DAILY_POOL, 3) : []; }
+  function bumpDaily(kind, amt, absolute) {
+    if (!window.Progress) return;
+    var done = Progress.bumpMission(GAME, kind, amt == null ? 1 : amt, !!absolute);
+    if (done) {
+      setLegacyBal(legacyBal() + (done.reward || 1));
+      var pw = portWorld(); popWorld(pw.x, pw.y + 11, pw.z, 'Daily done! +' + (done.reward || 1) + '✦', { color: '#9ef0b0', size: 17, life: 1.7 });
+      burstWorld(pw.x, pw.y, pw.z, { count: 24, colors: ['#9ef0b0', '#fff3c4', '#d9b8ff'], speed: 190, life: 1.0 });
+      sfx('score'); haptic(20); if (manageOpen) renderManage();
+    }
+  }
+  var dailyBase = { lm: null, sh: null };
+  function trackDaily(s) {                                            // earn/ship missions tracked via snapshot deltas
+    if (!window.Progress || !s) return;
+    var lm = s.lifetimeMoney; if (dailyBase.lm == null) dailyBase.lm = lm; if (lm > dailyBase.lm) { bumpDaily('earn', lm - dailyBase.lm); dailyBase.lm = lm; }
+    var sh = s.stats ? s.stats.shipped : 0; if (dailyBase.sh == null) dailyBase.sh = sh; if (sh > dailyBase.sh) { bumpDaily('ship', sh - dailyBase.sh); dailyBase.sh = sh; }
+  }
+  function showStreak() {                                             // once-per-day login reward
+    if (!window.Retention) return;
+    var last = Retention.get(GAME, 'lastDay', null), today = Retention.todayStr();
+    var st = Retention.touchStreak(GAME);
+    if (last !== today && st > 0) {
+      var reward = Math.max(1, Math.min(10, st));
+      setLegacyBal(legacyBal() + reward);
+      showHint('Day ' + st + ' streak! +' + reward + '✦ Legacy · Today: ' + todayTide().name);
+      setTimeout(function () { var pw = portWorld(); if (pw) burstWorld(pw.x, pw.y, pw.z, { count: 26, colors: ['#9ef0b0', '#ffe08a', '#d9b8ff'], speed: 200, life: 1.1 }); sfx('score'); }, 400);
+    } else if (last === today) {
+      showHint('Today: ' + todayTide().name + ' — ' + todayTide().desc);
+    }
+  }
+
   function buildEconUI() {
     econHud = document.createElement('div'); econHud.id = 'econhud';
     function chip(id, icon) { var s = document.createElement('span'); s.className = 'estat'; s.innerHTML = '<b>' + icon + '</b><i id="' + id + '">0</i>'; econHud.appendChild(s); return s.querySelector('i'); }
@@ -964,6 +1016,7 @@
     checkGoals(s);
     handleHazard(s);
     checkAchievements(s);
+    trackDaily(s);
     // reveal the Legacy button once prestige is relevant; pulse when a prestige is available
     if (legacyBtn) { var lp = s.prestige || { can: false }; var show = lp.can || legacyBal() > 0; legacyBtn.style.display = show ? '' : 'none'; legacyBtn.classList.toggle('ready', lp.can && !legacyOpen); }
     if (legacyOpen) renderLegacy();
@@ -973,6 +1026,18 @@
   function renderManage() {
     if (!simReady()) { managePanel.classList.remove('show'); manageOpen = false; return; }
     var s = SIM.state(), BT = SIM.BT, html = '<div class="mp-head">Build & upgrade<button id="mp-close">✕</button></div>';
+    // daily missions — a "come back tomorrow" loop, rewarding Legacy; today's tide shown in the header
+    var dl = dailyList();
+    if (dl && dl.length) {
+      html += '<div class="mp-sec">Daily missions ✦ · Tide: ' + todayTide().name + '</div><div class="mp-grid">';
+      dl.forEach(function (m) {
+        var pct = Math.min(100, Math.round(100 * m.prog / m.target));
+        html += '<div class="mp-item daily' + (m.done ? ' done' : '') + '"><span class="mi-n">' + m.text + (m.done ? ' ✓' : '') + '</span>' +
+          '<span class="md-bar"><i style="width:' + pct + '%"></i></span>' +
+          '<span class="mi-c">' + Math.min(m.prog, m.target) + '/' + m.target + ' · +' + m.reward + '✦</span></div>';
+      });
+      html += '</div>';
+    }
     // orders: active delivery goals paying a premium — listed first so they grab attention
     if (s.contracts && s.contracts.length) {
       html += '<div class="mp-sec">Orders</div><div class="mp-grid">';
@@ -1033,11 +1098,11 @@
     }
     managePanel.innerHTML = html;
     managePanel.querySelector('#mp-close').addEventListener('click', toggleManage);
-    managePanel.querySelectorAll('[data-build]').forEach(function (el) { el.addEventListener('click', function () { var id = el.getAttribute('data-build'); var t = SIM.BT[id]; if (SIM.build(id)) { plopFeedback(t ? t.era + 1 : 1, t ? t.name : 'Built'); checkMilestones(); updateHUD(); renderManage(); } else sfx('lose'); }); });
-    managePanel.querySelectorAll('[data-up]').forEach(function (el) { el.addEventListener('click', function () { var i = +el.getAttribute('data-up'); if (SIM.canUpgrade(i)) { var lv = SIM.port().buildings[i].level; SIM.upgrade(i); plopFeedback(lv + 1, 'Upgraded'); updateHUD(); renderManage(); } else sfx('lose'); }); });
-    managePanel.querySelectorAll('[data-mgr]').forEach(function (el) { el.addEventListener('click', function () { var k = el.getAttribute('data-mgr'); if (SIM.buyManager(k)) { plopFeedback(2, 'Hired!'); sfx('merge'); haptic(20); updateHUD(); renderManage(); } else sfx('lose'); }); });
+    managePanel.querySelectorAll('[data-build]').forEach(function (el) { el.addEventListener('click', function () { var id = el.getAttribute('data-build'); var t = SIM.BT[id]; if (SIM.build(id)) { plopFeedback(t ? t.era + 1 : 1, t ? t.name : 'Built'); checkMilestones(); bumpDaily('build'); updateHUD(); renderManage(); } else sfx('lose'); }); });
+    managePanel.querySelectorAll('[data-up]').forEach(function (el) { el.addEventListener('click', function () { var i = +el.getAttribute('data-up'); if (SIM.canUpgrade(i)) { var lv = SIM.port().buildings[i].level; SIM.upgrade(i); plopFeedback(lv + 1, 'Upgraded'); bumpDaily('upgrade'); updateHUD(); renderManage(); } else sfx('lose'); }); });
+    managePanel.querySelectorAll('[data-mgr]').forEach(function (el) { el.addEventListener('click', function () { var k = el.getAttribute('data-mgr'); if (SIM.buyManager(k)) { plopFeedback(2, 'Hired!'); sfx('merge'); haptic(20); bumpDaily('manager'); updateHUD(); renderManage(); } else sfx('lose'); }); });
     managePanel.querySelectorAll('[data-repair]').forEach(function (el) { el.addEventListener('click', function () { var i = +el.getAttribute('data-repair'); if (SIM.repair(i)) { plopFeedback(2, 'Repaired'); sfx('merge'); haptic(16); updateHUD(); renderManage(); } else sfx('lose'); }); });
-    managePanel.querySelectorAll('[data-order]').forEach(function (el) { el.addEventListener('click', function () { var id = el.getAttribute('data-order'); var paid = SIM.fulfillContract(id); if (paid > 0) { statFlags.orders++; var pw = portWorld(); if (pw) { popWorld(pw.x, pw.y + 7, pw.z, '+£' + fmt(paid), { color: '#ffe08a', size: 22, life: 1.4, vy: -56 }); burstWorld(pw.x, pw.y, pw.z, { count: 30, colors: ['#ffe08a', '#fff3c4', '#ffd24a'], speed: 200, life: 1.0, size: 5 }); } shakeFX(5, 0.3); sfx('win'); haptic(30); confettiBurst(); updateHUD(); renderManage(); } else sfx('lose'); }); });
+    managePanel.querySelectorAll('[data-order]').forEach(function (el) { el.addEventListener('click', function () { var id = el.getAttribute('data-order'); var paid = SIM.fulfillContract(id); if (paid > 0) { statFlags.orders++; bumpDaily('order'); var pw = portWorld(); if (pw) { popWorld(pw.x, pw.y + 7, pw.z, '+£' + fmt(paid), { color: '#ffe08a', size: 22, life: 1.4, vy: -56 }); burstWorld(pw.x, pw.y, pw.z, { count: 30, colors: ['#ffe08a', '#fff3c4', '#ffd24a'], speed: 200, life: 1.0, size: 5 }); } shakeFX(5, 0.3); sfx('win'); haptic(30); confettiBurst(); updateHUD(); renderManage(); } else sfx('lose'); }); });
   }
   // build/upgrade "plop": shake + dust burst + ascending pitch + haptic + popup at the port
   function plopFeedback(tier, label) {
@@ -1093,7 +1158,8 @@
     waterMesh = E.mesh(E.plane(2900, 300)); facTex = E.texture(facadeTexture()); gritTex = E.texture(gritTexture()); blobTex = E.texture(blobTexture());
     loadAssets();
     loadUnlocked(); loadFounded(); loadGoal();
-    if (SIM) computeMeta();                                          // apply Legacy multipliers before offline accrual
+    if (SIM) { computeMeta(); applyTide(); }                          // Legacy multipliers + today's market tide before offline accrual
+    dailyList();                                                     // materialise today's missions so event hooks can bump them
     var offGain = 0, offSec = 0;
     if (SIM) { SIM.load(); if (SIM.raw().founded) { var m0 = SIM.raw().money; offSec = SIM.applyOffline(); offGain = SIM.raw().money - m0; era = SIM.raw().era; } }
     if (SIM && SIM.raw()) { hudShownMoney = prevMoney = SIM.raw().money; }
@@ -1118,6 +1184,7 @@
       if (/[?&]still\b/.test(q)) paused = true;
     } catch (e) {}
     updateFoundUI();
+    setTimeout(showStreak, 1400);                                    // once-per-day login streak + today's tide
     if (offGain > 0 && offSec > 60) setTimeout(function () { showOffline(offGain, offSec); }, 900);
     if (window.ResizeObserver) new ResizeObserver(resize).observe(wrap);
     window.addEventListener('resize', resize);

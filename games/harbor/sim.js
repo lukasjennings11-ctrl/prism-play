@@ -80,6 +80,11 @@
   var META = { prodMul: 1, sellMul: 1, costMul: 1, startMoney: 0, offlineHours: 8, hazardResist: 0, routeMul: 1 };
   function applyMeta(m) { if (!m) return; for (var k in META) if (typeof m[k] === 'number') META[k] = m[k]; }
 
+  // TIDE: today's daily market modifier (computed in game.js from the seeded daily RNG, fed in here).
+  // A rotating positive bonus that rewards logging in — production and/or per-resource sale boosts.
+  var TIDE = { prod: 1, sell: { fish: 1, timber: 1, goods: 1 } };
+  function setTide(t) { if (!t) return; TIDE.prod = t.prod || 1; TIDE.sell = { fish: (t.sell && t.sell.fish) || 1, timber: (t.sell && t.sell.timber) || 1, goods: (t.sell && t.sell.goods) || 1 }; }
+
   var S = null;     // empire root
   var CUR = null;   // the port currently in scope for the per-port helpers below
   function now() { return Date.now ? Date.now() : 0; }
@@ -99,7 +104,7 @@
       active: 'green', ports: {},
       network: { xp: 0, level: 1, routes: [] },
       hazard: { t: 0, next: hzRand(70, 150), phase: 'idle', strikeId: 0, last: null }, crash: null,
-      stats: { storms: 0 }
+      stats: { storms: 0, shipped: 0 }
     };
   }
   function setActive(id) { if (id != null) S.active = id; CUR = (S.ports && S.ports[S.active]) || null; }
@@ -138,6 +143,7 @@
     if (!S.hazard) S.hazard = { t: 0, next: hzRand(70, 150), phase: 'idle', strikeId: 0, last: null };
     if (typeof S.crash === 'undefined') S.crash = null;
     if (!S.stats) S.stats = { storms: 0 };
+    if (typeof S.stats.shipped !== 'number') S.stats.shipped = 0;
     setActive(S.active);
   }
 
@@ -238,7 +244,7 @@
       pa.res[r.res] -= amt; pb.res[r.res] += amt;
       shipped += amt; income += amt * routeTariff(r.res);
     }
-    if (shipped > 0) addNetXP(shipped * NET_XP_PER_UNIT);
+    if (shipped > 0) { addNetXP(shipped * NET_XP_PER_UNIT); if (S.stats) S.stats.shipped = (S.stats.shipped || 0) + shipped; }
     return income;
   }
   function networkView() {
@@ -315,7 +321,7 @@
     // labour: housing feeds crew. Foreman manager makes the same crew go further.
     var labor = j > 0 ? clamp(p / j, 0, 1) : 1;
     labor = Math.min(1.25, labor * mgrMul('labour'));
-    var prodMul = mgrMul('fishing') * (META.prodMul || 1), salesMul = mgrMul('sales') * (META.sellMul || 1);   // managers × prestige Legacy
+    var prodMul = mgrMul('fishing') * (META.prodMul || 1) * (TIDE.prod || 1), salesMul = mgrMul('sales') * (META.sellMul || 1);   // managers × Legacy × daily tide
     // soft-cap taper: production slows as a store fills (1.0 empty -> 0.35 full) so caps bite gently
     var taper = {};
     for (var r0 in cap) taper[r0] = 1 - 0.65 * clamp((port.res[r0] || 0) / cap[r0], 0, 1);
@@ -335,7 +341,7 @@
       var rate = soldR[s] / dt;
       var target = DEMAND_SOFT / (DEMAND_SOFT + rate);
       port.demand[s] = clamp((port.demand[s] || 1) + (target - (port.demand[s] || 1)) * ease, 0.25, 1);
-      money += revR[s] * port.demand[s] * salesMul * crashMul(s);     // market crash temporarily floors a price
+      money += revR[s] * port.demand[s] * salesMul * crashMul(s) * (TIDE.sell[s] || 1);   // crash floors / daily tide boosts a price
     }
     // wages: every working crew costs money/s; Foreman trims the bill
     money -= WAGE * Math.min(p, j) * dt * Math.max(0.2, 1 - 0.10 * (S.managers.labour || 0));
@@ -428,7 +434,7 @@
       network: networkView(),
       hazard: S.hazard ? { phase: S.hazard.phase || 'idle', port: S.hazard.port || null, kind: S.hazard.kind || null, in: Math.max(0, Math.ceil(S.hazard.warn || 0)), strikeId: S.hazard.strikeId || 0, last: S.hazard.last || null } : { phase: 'idle', strikeId: 0, last: null },
       crash: S.crash ? { res: S.crash.res, t: Math.ceil(S.crash.t) } : null,
-      stats: { storms: (S.stats && S.stats.storms) || 0, ports: Object.keys(S.ports).length },
+      stats: { storms: (S.stats && S.stats.storms) || 0, shipped: Math.floor((S.stats && S.stats.shipped) || 0), ports: Object.keys(S.ports).length },
       ports: portList()
     };
     if (port) {
@@ -449,7 +455,7 @@
   g.HARBOR_SIM = {
     BT: BT, ERAS: ERAS, ERA_REQ: ERA_REQ, MANAGERS: MANAGERS, WORLD_SPEC: WORLD_SPEC, WORLD_ORDER: WORLD_ORDER,
     eraName: eraName, eraReq: eraReq,
-    applyMeta: applyMeta, meta: function () { return META; },
+    applyMeta: applyMeta, meta: function () { return META; }, setTide: setTide,
     prestigeGain: prestigeGain, canPrestige: canPrestige, resetRun: resetRun,
     buyManager: buyManager, canBuyManager: canBuyManager, managerCost: managerCost,
     fulfillContract: fulfillContract, canFulfill: canFulfill, rerollContract: rerollContract,
