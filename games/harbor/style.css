@@ -267,13 +267,25 @@ html, body {
 #welcomemodal .wm-btn { width: 100%; padding: 13px; border: 0; border-radius: 13px; font-family: 'Lilita', cursive; font-weight: 400; font-size: 18px; letter-spacing: .02em; color: #20140a; background: linear-gradient(180deg, #ffd98a, var(--brass)); cursor: pointer; box-shadow: 0 6px 22px rgba(242,179,94,.35); }
 
 /* manage panel (compact bottom sheet) */
-#managepanel {
+#managepanel, #settingspanel {
   position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(52px + env(safe-area-inset-bottom));
   display: none; flex-direction: column; gap: 4px; width: min(330px, calc(100% - 16px)); max-height: 44%;
   overflow-y: auto; z-index: 9; background: rgba(8,18,24,.93); border: 1px solid rgba(255,255,255,.16);
   border-radius: 12px; padding: 8px 10px; backdrop-filter: blur(8px);
 }
-#managepanel.show { display: flex; }
+#managepanel.show, #settingspanel.show { display: flex; }
+#settingspanel { max-height: 64%; }
+.set-help { font-family: 'Fredoka',system-ui,sans-serif; font-size: 10.5px; line-height: 1.55; color: var(--text); opacity: .92; background: rgba(255,255,255,.05); border-radius: 8px; padding: 6px 8px; }
+.set-help b { color: var(--brass); font-weight: 700; }
+.set-about { font-family: 'Fredoka',system-ui,sans-serif; font-size: 10px; color: var(--muted); }
+.mp-item.set-link { flex-direction: row; align-items: center; text-decoration: none; }
+.mp-item.set-link .mi-n { flex: 1; }
+.mp-item.set-reset { grid-column: 1 / -1; flex-direction: row; align-items: center; background: rgba(220,90,80,.12); border-color: rgba(220,90,80,.4); }
+.mp-item.set-reset .mi-n { flex: 1; color: #ff9b8f; }
+.mp-item.set-reset .mi-c { color: #ff9b8f; }
+.mp-item.set-reset.arm { background: rgba(220,70,60,.3); border-color: #ff7a6a; animation: armpulse .5s ease-in-out infinite alternate; }
+.mp-item.set-reset.arm .mi-n, .mp-item.set-reset.arm .mi-c { color: #fff; }
+@keyframes armpulse { from { box-shadow: 0 0 0 0 rgba(255,90,70,.5); } to { box-shadow: 0 0 0 5px rgba(255,90,70,0); } }
 .mp-head { display: flex; align-items: center; font-family: 'Lilita', cursive; font-weight: 400; font-size: 15px; letter-spacing: .02em; color: var(--text); }
 .mp-head #mp-close { margin-left: auto; background: rgba(255,255,255,.1); border: 0; color: var(--text); border-radius: 7px; width: 22px; height: 22px; cursor: pointer; font-size: 13px; }
 .mp-sec { font-family: 'Fredoka',system-ui,sans-serif; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-top: 2px; }
@@ -328,6 +340,8 @@ html, body {
 /* mute button */
 #mutebtn { margin-left: auto; width: 30px; height: 30px; border-radius: 999px; border: 1px solid rgba(255,255,255,.18); background: rgba(8,18,24,.7); color: var(--text); font-size: 14px; cursor: pointer; }
 #mutebtn.off { color: var(--muted); opacity: .6; }
+#setbtn { width: 30px; height: 30px; border-radius: 999px; border: 1px solid rgba(255,255,255,.18); background: rgba(8,18,24,.7); color: var(--text); font-size: 15px; cursor: pointer; }
+#setbtn:active { transform: scale(.92); }
 #mutebtn + #advbtn, #mutebtn + #managebtn { margin-left: 6px; }
 .estat.full { animation: capPulse .9s ease-in-out infinite; }
 @keyframes capPulse { 0%,100% { border-color: rgba(255,255,255,.14); } 50% { border-color: #ff6b6b; box-shadow: 0 0 10px rgba(255,107,107,.5); } }
