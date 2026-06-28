@@ -1,6 +1,6 @@
 {
-  "name": "Prism Play",
-  "short_name": "Prism Play",
+  "name": "PortMaster",
+  "short_name": "PortMaster",
   "description": "Ten browser games. No installs. No accounts. Pick one and play.",
   "start_url": ".",
   "display": "standalone",
