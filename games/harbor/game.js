@@ -215,15 +215,16 @@
       if (ok && sum < bestDepth) { bestDepth = sum; bestA = a; }
     }
     var cx = p.x + Math.sin(bestA) * 78, cz = p.z + Math.cos(bestA) * 78;
+    var dev = 0; try { var ss = SIM && SIM.state(); dev = (ss && ss.buildings && ss.buildings.length) || 0; } catch (e) {}   // busier as the port develops
     var rng = mulberry(hash('amb:' + biomeId + ':' + Math.round(cx) + ':' + era));
-    var nBoats = 2 + Math.min(7, era * 2), nGulls = 4 + era * 2, boats = [], gulls = [], i;
+    var nBoats = 2 + Math.min(9, era * 2 + (dev / 5 | 0)), nGulls = 4 + Math.min(12, era * 2 + (dev / 4 | 0)), boats = [], gulls = [], i;
     for (i = 0; i < nBoats; i++) {
       boats.push({ a0: rng() * 6.283, sp: (0.05 + rng() * 0.07) * (rng() < 0.5 ? 1 : -1), rx: 30 + rng() * 26, rz: 22 + rng() * 20, hull: rng() < 0.5 ? [0.45, 0.22, 0.14] : [0.5, 0.4, 0.28], big: rng() < 0.4 });
     }
     for (i = 0; i < nGulls; i++) {
       gulls.push({ a0: rng() * 6.283, sp: 0.5 + rng() * 0.4, r: 12 + rng() * 24, h: 22 + rng() * 22, bob: rng() * 6.283 });
     }
-    ambient = { boats: boats, gulls: gulls, cx: cx, cz: cz };
+    ambient = { boats: boats, gulls: gulls, cx: cx, cz: cz, dev: dev };
   }
   // draw boats + gulls; assumes M program is bound with uVCol=0, uTexMix=0, uAlbedo=0 (flat colour)
   function drawAmbient(M) {
@@ -1165,6 +1166,7 @@
     handleHazard(s);
     checkAchievements(s);
     trackDaily(s);
+    if (scene.port && ambient && Math.abs((s.buildings ? s.buildings.length : 0) - (ambient.dev || 0)) >= 3) ambient = null;   // refresh harbour traffic as you grow
     // reveal the Legacy button once prestige is relevant; pulse when a prestige is available
     if (legacyBtn) { var lp = s.prestige || { can: false }; var show = lp.can || legacyBal() > 0; legacyBtn.style.display = show ? '' : 'none'; legacyBtn.classList.toggle('ready', lp.can && !legacyOpen); }
     if (crateBtn) { var nc = crateCount(); crateBtn.style.display = nc > 0 ? '' : 'none'; crateBtn.setAttribute('data-n', nc); }
