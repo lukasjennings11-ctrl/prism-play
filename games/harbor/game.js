@@ -1339,7 +1339,7 @@
 
   function boot() {
     if (window.Portal) Portal.loadingStart();
-    if (!gl) { if (loader) loader.innerHTML = '<div style="color:#fff;font-family:sans-serif;padding:20px;text-align:center">WebGL2 is required to play HARBOR.</div>'; return; }
+    if (!gl) { if (loader) loader.innerHTML = '<div style="color:#fff;font-family:sans-serif;padding:20px;text-align:center">WebGL2 is required to play PortMaster.</div>'; return; }
     E = HGL.createEngine(gl); ensureFX();
     gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL); gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK);
     boxMesh = E.mesh(new HGL.Builder().box(0, 0, 0, 1, 1, 1, [1, 1, 1]).data());
@@ -1398,7 +1398,7 @@
     if (!window.Retention || Retention.get(GAME, 'seen', false)) return false;
     Retention.set(GAME, 'seen', true);
     var ov = document.createElement('div'); ov.id = 'welcomemodal';
-    ov.innerHTML = '<div class="wm-card"><div class="wm-logo">HARBOR</div>' +
+    ov.innerHTML = '<div class="wm-card"><div class="wm-logo">PortMaster</div>' +
       '<div class="wm-body">Found a harbour on the glowing coast, then grow a humble fishing village into a global trade empire.</div>' +
       '<div class="wm-feat">⚓ Build &amp; upgrade · 🚢 trade between islands · 🌊 weather storms · ✦ prestige to grow <i>forever</i></div>' +
       '<button class="wm-btn">Begin ⚓</button></div>';
