@@ -443,9 +443,17 @@
   }
 
   // ---- feel: audio + particle/popup helpers ----
-  var muted = false, hudShownMoney = 0, prevMoney = 0, incomeTimer = 0, cine = null, ascendBanner = null;
+  var muted = !!(window.Retention && Retention.get(GAME, 'muted', false));
+  var hapticsOff = !!(window.Retention && Retention.get(GAME, 'hapticsOff', false));
+  var hudShownMoney = 0, prevMoney = 0, incomeTimer = 0, cine = null, ascendBanner = null;
   function sfx(name, a) { if (window.Juice && !muted) Juice.Audio.play(name, a); }
-  function haptic(ms) { if (window.Juice) Juice.vibrate(ms); }
+  function haptic(ms) { if (window.Juice && !hapticsOff) Juice.vibrate(ms); }
+  function applyMuted(v) {
+    muted = !!v; if (window.Juice) Juice.Audio.setMuted(muted); if (window.Retention) Retention.set(GAME, 'muted', muted);
+    if (muteBtn) { muteBtn.textContent = muted ? '♪̸' : '♪'; muteBtn.classList.toggle('off', muted); }
+    if (settingsOpen) renderSettings();
+  }
+  function applyHaptics(off) { hapticsOff = !!off; if (window.Retention) Retention.set(GAME, 'hapticsOff', hapticsOff); if (settingsOpen) renderSettings(); }
   function popWorld(wx, wy, wz, text, opts) { if (!FX) return; var s = worldToScreen(wx, wy, wz); if (s) FX.pop.add(s.x, s.y, text, opts); }
   function burstWorld(wx, wy, wz, opts) { if (!FX) return; var s = worldToScreen(wx, wy, wz); if (s) FX.p.burst(s.x, s.y, opts); }
   function shakeFX(m, d) { if (FX) FX.shake.add(m, d); }
@@ -751,6 +759,7 @@
 
   // ---- economy HUD + port management ----
   var econHud = null, hudMoney = null, hudFish = null, hudPop = null, advBtn = null, managePanel = null, manageOpen = false;
+  var setBtn = null, settingsPanel = null, settingsOpen = false, resetArm = false;
   var SIM = window.HARBOR_SIM || null;
   function simReady() { return !!(SIM && SIM.port && SIM.port()); }   // active world's port exists
   // idle number notation: 1.2k, 3.40M, 5.7B … Td, then scientific. Stays readable as numbers explode.
@@ -1121,15 +1130,18 @@
     econHud = document.createElement('div'); econHud.id = 'econhud';
     function chip(id, icon) { var s = document.createElement('span'); s.className = 'estat'; s.innerHTML = '<b>' + icon + '</b><i id="' + id + '">0</i>'; econHud.appendChild(s); return s.querySelector('i'); }
     hudMoney = chip('e-money', '£'); hudFish = chip('e-fish', 'Fish'); hudPop = chip('e-pop', 'Crew');
-    muteBtn = document.createElement('button'); muteBtn.id = 'mutebtn'; muteBtn.textContent = '♪'; muteBtn.title = 'Sound';
-    muteBtn.addEventListener('click', function () { muted = !muted; if (window.Juice) Juice.Audio.setMuted(muted); muteBtn.textContent = muted ? '♪̸' : '♪'; muteBtn.classList.toggle('off', muted); });
+    muteBtn = document.createElement('button'); muteBtn.id = 'mutebtn'; muteBtn.textContent = muted ? '♪̸' : '♪'; muteBtn.title = 'Sound'; muteBtn.classList.toggle('off', muted);
+    muteBtn.addEventListener('click', function () { applyMuted(!muted); sfx('tap'); });
+    if (window.Juice) Juice.Audio.setMuted(muted);
+    setBtn = document.createElement('button'); setBtn.id = 'setbtn'; setBtn.textContent = '⚙'; setBtn.title = 'Settings';
+    setBtn.addEventListener('click', toggleSettings);
     var mBtn = document.createElement('button'); mBtn.id = 'managebtn'; mBtn.textContent = 'Manage port'; mBtn.addEventListener('click', toggleManage);
     var nBtn = document.createElement('button'); nBtn.id = 'netbtn'; nBtn.textContent = 'Trade network'; nBtn.addEventListener('click', openTrade);
     legacyBtn = document.createElement('button'); legacyBtn.id = 'legacybtn'; legacyBtn.textContent = '✦ Legacy'; legacyBtn.style.display = 'none'; legacyBtn.addEventListener('click', openLegacy);
     crateBtn = document.createElement('button'); crateBtn.id = 'cratebtn'; crateBtn.textContent = '🎁'; crateBtn.style.display = 'none'; crateBtn.addEventListener('click', openCrate);
     advBtn = document.createElement('button'); advBtn.id = 'advbtn'; advBtn.textContent = 'Advance era'; advBtn.style.display = 'none'; advBtn.addEventListener('click', doAdvance);
-    // top row: resource chips + mute only (keeps it short so the era/goal bars stay clear)
-    econHud.appendChild(muteBtn);
+    // top row: resource chips + mute + settings only (keeps it short so the era/goal bars stay clear)
+    econHud.appendChild(muteBtn); econHud.appendChild(setBtn);
     wrap.appendChild(econHud);
     // bottom action bar: the primary buttons, thumb-reachable, so the top never overflows
     actionBar = document.createElement('div'); actionBar.id = 'actionbar';
@@ -1148,7 +1160,77 @@
 
     managePanel = document.createElement('div'); managePanel.id = 'managepanel';
     wrap.appendChild(managePanel);
+
+    settingsPanel = document.createElement('div'); settingsPanel.id = 'settingspanel';
+    wrap.appendChild(settingsPanel);
     updateHUD();
+  }
+
+  var BUILD_TAG = 'v37';
+  function toggleSettings() {
+    settingsOpen = !settingsOpen;
+    if (settingsOpen && manageOpen) { manageOpen = false; managePanel.classList.remove('show'); }
+    settingsPanel.classList.toggle('show', settingsOpen);
+    resetArm = false;
+    if (settingsOpen) { renderSettings(); sfx('tap'); haptic(8); }
+  }
+  function renderSettings() {
+    if (!settingsPanel) return;
+    var streak = (window.Retention && Retention.streak) ? Retention.streak(GAME) : 0;
+    var charters = chartersCount(), leg = legacyBal();
+    var h = '<div class="mp-head">Settings<button id="set-close">✕</button></div>';
+    h += '<div class="mp-sec">Audio & feedback</div><div class="mp-grid">';
+    h += '<button class="mp-item auto' + (!muted ? ' on' : '') + '" data-set="sound"><span class="mi-n">Sound</span><span class="mi-c">' + (muted ? 'OFF' : 'ON') + '</span></button>';
+    h += '<button class="mp-item auto' + (!hapticsOff ? ' on' : '') + '" data-set="haptics"><span class="mi-n">Vibration</span><span class="mi-c">' + (hapticsOff ? 'OFF' : 'ON') + '</span></button>';
+    h += '</div>';
+    h += '<div class="mp-sec">How to play</div>';
+    h += '<div class="set-help">⚓ Tap the glowing harbour, then <b>Found village</b>.<br>' +
+         '🏗️ <b>Manage port</b> to build &amp; upgrade — huts catch fish, cottages house crew, markets sell.<br>' +
+         '📈 Fill the <b>era bar</b> (cash + required buildings) to <b>Advance</b> to bigger eras.<br>' +
+         '🚢 <b>Trade network</b> links your ports into routes for passive income.<br>' +
+         '🌊 Storms damage buildings — repair them in Manage.<br>' +
+         '✦ When growth slows, <b>Legacy</b> lets you prestige for permanent multipliers.<br>' +
+         '🖐️ Drag to pan · pinch to zoom · twist to rotate.</div>';
+    h += '<div class="mp-sec">About</div>';
+    h += '<div class="set-about">PortMaster · build ' + BUILD_TAG +
+         (streak > 1 ? ' · 🔥 ' + streak + '-day streak' : '') +
+         (charters > 0 ? ' · ' + charters + ' charter' + (charters > 1 ? 's' : '') : '') +
+         (leg > 0 ? ' · ✦' + fmt(leg) + ' Legacy' : '') + '</div>';
+    h += '<div class="mp-grid"><a class="mp-item set-link" href="../../privacy.html" target="_blank" rel="noopener"><span class="mi-n">Privacy policy</span><span class="mi-c">↗</span></a>' +
+         '<button class="mp-item set-link" data-set="install"><span class="mi-n">Add to home screen</span><span class="mi-c">⤓</span></button></div>';
+    h += '<div class="mp-sec">Danger zone</div>';
+    h += '<button class="mp-item set-reset' + (resetArm ? ' arm' : '') + '" data-set="reset"><span class="mi-n">' +
+         (resetArm ? 'Tap again to wipe everything' : 'Reset all progress') + '</span><span class="mi-c">' + (resetArm ? '⚠' : '↺') + '</span></button>';
+    settingsPanel.innerHTML = h;
+    settingsPanel.querySelector('#set-close').addEventListener('click', toggleSettings);
+    settingsPanel.querySelectorAll('[data-set]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        var a = el.getAttribute('data-set');
+        if (a === 'sound') { applyMuted(!muted); sfx('tap'); haptic(8); }
+        else if (a === 'haptics') { applyHaptics(!hapticsOff); haptic(12); renderSettings(); }
+        else if (a === 'install') { promptInstall(); }
+        else if (a === 'reset') {
+          if (!resetArm) { resetArm = true; haptic(20); renderSettings(); setTimeout(function () { resetArm = false; if (settingsOpen) renderSettings(); }, 4000); }
+          else { resetProgress(); }
+        }
+      });
+    });
+  }
+  function resetProgress() {
+    try {
+      var rm = [], pre = 'gf:' + GAME + ':';
+      for (var i = 0; i < localStorage.length; i++) { var key = localStorage.key(i); if (key && key.indexOf(pre) === 0) rm.push(key); }
+      rm.forEach(function (key) { localStorage.removeItem(key); });
+    } catch (e) {}
+    try { if (window.Juice) Juice.Audio.play('lose'); } catch (e) {}
+    location.reload();
+  }
+  // PWA install: use the captured beforeinstallprompt event when available.
+  var deferredPrompt = null;
+  window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferredPrompt = e; });
+  function promptInstall() {
+    if (deferredPrompt) { deferredPrompt.prompt(); deferredPrompt.userChoice.finally(function () { deferredPrompt = null; }); }
+    else { showHint('Use your browser menu → “Add to Home Screen” to install PortMaster'); }
   }
 
   function updateHUD() {
@@ -1156,7 +1238,7 @@
     var on = simReady();
     econHud.classList.toggle('show', on); if (actionBar) actionBar.classList.toggle('show', on && !cine);
     if (eraBar) eraBar.classList.toggle('show', on && !cine);
-    if (!on) { if (managePanel) managePanel.classList.remove('show'); return; }
+    if (!on) { if (managePanel) managePanel.classList.remove('show'); if (settingsPanel) { settingsPanel.classList.remove('show'); settingsOpen = false; } return; }
     var s = SIM.state();
     hudFish.textContent = fmt(s.res.fish); hudPop.textContent = fmt(s.pop);
     if (hudFish.parentNode) hudFish.parentNode.classList.toggle('full', s.res.fish >= s.caps.fish * 0.98);  // storage-full nudge
@@ -1190,7 +1272,7 @@
     if (legacyOpen) renderLegacy();
     if (manageOpen) renderManage();
   }
-  function toggleManage() { manageOpen = !manageOpen; managePanel.classList.toggle('show', manageOpen); if (manageOpen) renderManage(); }
+  function toggleManage() { manageOpen = !manageOpen; if (manageOpen && settingsOpen) { settingsOpen = false; settingsPanel.classList.remove('show'); } managePanel.classList.toggle('show', manageOpen); if (manageOpen) renderManage(); }
   function renderManage() {
     if (!simReady()) { managePanel.classList.remove('show'); manageOpen = false; return; }
     var s = SIM.state(), BT = SIM.BT, html = '<div class="mp-head">Build & upgrade<button id="mp-close">✕</button></div>';
