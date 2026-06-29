@@ -986,6 +986,7 @@
       showHint(evIcon(ev.id) + ' ' + ev.name + '! +' + Math.round((ev.data.mult - 1) * 100) + '% output');
       var pw = portWorld(); if (pw) burstWorld(pw.x, pw.y, pw.z, { count: 24, colors: ['#ffe08a', '#fff3c4', '#ffd24a'], speed: 200, life: 1.1, size: 5 });
       sfx('win'); haptic(18);
+      if (ev.id === 'festival') startFever();                          // Festival kicks off the active tap-frenzy
     } else showEventModal(ev);                                         // choice / collect — a decision modal
   }
 
@@ -1110,6 +1111,60 @@
       raceBanner.querySelector('.rb-cd').textContent = rem + 's';
       raceBanner.classList.add('show');
     } else raceBanner.classList.remove('show');
+  }
+
+  // ---- active Fever (Phase 7e): a Festival opens a tap-frenzy — coins rain over the harbour, a
+  // combo meter rewards rapid taps. Pure upside; ignoring it just means normal idle play. ----
+  var feverEnd = 0, feverSpawnT = null, feverLoopT = null, combo = 0, comboT = 0, feverLayer = null, comboEl = null;
+  function ensureFeverUI() {
+    if (feverLayer) return;
+    feverLayer = document.createElement('div'); feverLayer.id = 'fever'; wrap.appendChild(feverLayer);
+    comboEl = document.createElement('div'); comboEl.id = 'combo'; comboEl.innerHTML = '<span class="cb-x"></span><div class="cb-bar"><i></i></div>'; wrap.appendChild(comboEl);
+  }
+  function feverActive() { return Date.now() < feverEnd; }
+  function comboMult() { return 1 + Math.min(combo * 0.12, 4); }
+  function startFever(secs) {
+    ensureFeverUI(); secs = secs || 14; feverEnd = Date.now() + secs * 1000; combo = 0; comboT = 0;
+    showHint('🎆 FEVER! Tap the coins!'); sfx('win'); haptic(20);
+    spawnLoop(); clearTimeout(feverLoopT); feverTick();
+  }
+  function spawnLoop() {
+    clearTimeout(feverSpawnT); if (!feverActive()) return;
+    spawnCoin(); feverSpawnT = setTimeout(spawnLoop, 380 + Math.random() * 340);
+  }
+  function spawnCoin() {
+    ensureFeverUI();
+    var gem = Math.random() < 0.25;
+    var c = document.createElement('button'); c.className = 'coin'; c.textContent = gem ? '💎' : '🪙'; c.dataset.gem = gem ? '1' : '';
+    var x = 28 + Math.random() * (Math.max(120, CW) - 56), y = (CH || 700) * 0.34 + Math.random() * ((CH || 700) * 0.4);
+    c.style.left = x + 'px'; c.style.top = y + 'px';
+    c.addEventListener('click', function (e) { e.stopPropagation(); collectCoin(c); });
+    feverLayer.appendChild(c);
+    setTimeout(function () { if (c.parentNode) c.parentNode.removeChild(c); }, 2600);
+  }
+  function collectCoin(c) {
+    if (!feverActive()) { if (c.parentNode) c.parentNode.removeChild(c); return; }
+    combo++; comboT = 1.6;
+    var era = SIM.state().era || 0, mult = comboMult() * (c.dataset.gem ? 3 : 1);
+    var base = Math.max(20, Math.round((SIM.state().lifetimeMoney || 0) * 0.0008) + 28 * Math.pow(1.6, era));
+    var gain = Math.round(base * mult);
+    if (SIM.raw()) { SIM.raw().money += gain; SIM.raw().lifetimeMoney = (SIM.raw().lifetimeMoney || 0) + gain; }
+    var r = c.getBoundingClientRect();
+    if (FX) { FX.pop.add(r.left + r.width / 2, r.top, '+£' + fmt(gain), { color: c.dataset.gem ? '#bfe9ff' : '#ffe08a', size: 16, life: 1.0, vy: -50 }); FX.p.burst(r.left + r.width / 2, r.top + r.height / 2, { count: 8, colors: ['#ffe08a', '#fff3c4'], speed: 140, life: 0.7, size: 4 }); }
+    sfx('score'); haptic(7);
+    if (c.parentNode) c.parentNode.removeChild(c);
+    updateComboUI();
+  }
+  function updateComboUI() {
+    if (!comboEl) return;
+    if (combo > 1 && feverActive()) { comboEl.classList.add('show'); comboEl.querySelector('.cb-x').textContent = '×' + comboMult().toFixed(1) + ' COMBO'; comboEl.querySelector('.cb-bar i').style.width = Math.min(100, comboT / 1.6 * 100) + '%'; }
+    else comboEl.classList.remove('show');
+  }
+  function feverTick() {
+    if (!feverActive()) { combo = 0; if (comboEl) comboEl.classList.remove('show'); if (feverLayer) feverLayer.innerHTML = ''; updateHUD(); return; }
+    comboT -= 0.1; if (comboT <= 0) combo = 0;
+    updateComboUI();
+    feverLoopT = setTimeout(feverTick, 100);
   }
 
   // ---- Legacy / Prestige: meta progression persisted across runs (via Retention, survives a wipe) ----
@@ -1466,7 +1521,7 @@
     updateHUD();
   }
 
-  var BUILD_TAG = 'v43';
+  var BUILD_TAG = 'v44';
   function toggleSettings() {
     settingsOpen = !settingsOpen;
     if (settingsOpen) { if (manageOpen) { manageOpen = false; managePanel.classList.remove('show'); } if (expOpen) { expOpen = false; expPanel.classList.remove('show'); } }
@@ -1829,7 +1884,8 @@
     grantRelic: function (id) { var r = id ? grantRelicById(id) : grantRandomRelic(); if (r) { announceRelic(r); updateHUD(); } return r; },
     rival: function () { return rivalGet(); },
     triggerRival: function () { rivalPending = false; var r = rivalGet(); r.race = null; rivalSet(r); showRivalChallenge(); },
-    raceProgress: function () { var r = rivalGet(); return r.race ? { kind: r.race.kind, prog: raceCounter(r.race.kind) - r.race.base, target: r.race.target } : null; }
+    raceProgress: function () { var r = rivalGet(); return r.race ? { kind: r.race.kind, prog: raceCounter(r.race.kind) - r.race.base, target: r.race.target } : null; },
+    startFever: function (secs) { startFever(secs); }, fever: function () { return { active: feverActive(), combo: combo, mult: +comboMult().toFixed(2), coins: feverLayer ? feverLayer.querySelectorAll('.coin').length : 0 }; }, collectCoins: function () { if (feverLayer) feverLayer.querySelectorAll('.coin').forEach(function (c) { collectCoin(c); }); }
   };
 
   if (canvas && canvas.getContext) boot();
