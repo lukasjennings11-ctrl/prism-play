@@ -274,6 +274,7 @@
     var S = E.P_sky; gl.useProgram(S.p);
     gl.uniform3fv(S.u.uTop, en.top); gl.uniform3fv(S.u.uBot, en.bot); gl.uniform3fv(S.u.uSunCol, en.sun);
     gl.uniform2fv(S.u.uSun, [0.5 + sd[0] * 0.42, 0.32 + sd[1] * 0.5]);
+    gl.uniform1f(S.u.uNight, en.night); gl.uniform1f(S.u.uTime, clock);   // night starfield
     drawMesh(S, E.quad); gl.depthMask(true); gl.enable(gl.CULL_FACE);
 
     // scene meshes
@@ -392,6 +393,7 @@
     canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
     canvas.addEventListener('pointerdown', function (e) {
       if (window.Juice && !muted) Juice.Audio.unlock();           // unlock WebAudio on first gesture
+      if (!muted) startAmbient();                                 // start the harbour soundscape
       if (canvas.setPointerCapture) try { canvas.setPointerCapture(e.pointerId); } catch (x) {}
       ptrs.set(e.pointerId, pxy(e)); C.vAz = C.vEl = C.vTx = C.vTz = 0;
       if (ptrs.size === 1) { downPt = pxy(e); moved = false; multi = false; orbitMode = (e.button === 2 || e.shiftKey); var now = Date.now(); if (now - lastTap < 300) defaultView(); lastTap = now; }
@@ -451,9 +453,66 @@
   function applyMuted(v) {
     muted = !!v; if (window.Juice) Juice.Audio.setMuted(muted); if (window.Retention) Retention.set(GAME, 'muted', muted);
     if (muteBtn) { muteBtn.textContent = muted ? '♪̸' : '♪'; muteBtn.classList.toggle('off', muted); }
+    if (muted) stopAmbient(); else startAmbient();
     if (settingsOpen) renderSettings();
   }
   function applyHaptics(off) { hapticsOff = !!off; if (window.Retention) Retention.set(GAME, 'hapticsOff', hapticsOff); if (settingsOpen) renderSettings(); }
+
+  // Ambient harbour soundscape — a gentle synthesized wave bed with a slow swell
+  // plus occasional gull cries, on its own WebAudio graph. Subtle, respects the
+  // Sound toggle, pauses when the tab is hidden. No audio assets required.
+  var amb = null, ambGullT = null;
+  function startAmbient() {
+    if (muted) return;
+    if (!amb) {
+      try {
+        var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+        var ctx = new AC();
+        var master = ctx.createGain(); master.gain.value = 0; master.connect(ctx.destination);
+        var buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 2), ctx.sampleRate), d = buf.getChannelData(0), last = 0;
+        for (var i = 0; i < d.length; i++) { var w = Math.random() * 2 - 1; last = (last + 0.02 * w) / 1.02; d[i] = last * 3.2; }   // brown-ish noise
+        var src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
+        var lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 540; lp.Q.value = 0.4;
+        var wave = ctx.createGain(); wave.gain.value = 0.5;
+        src.connect(lp); lp.connect(wave); wave.connect(master);
+        var lfo = ctx.createOscillator(); lfo.frequency.value = 0.09; var lfoG = ctx.createGain(); lfoG.gain.value = 0.22;
+        lfo.connect(lfoG); lfoG.connect(wave.gain); lfo.start();                                   // slow tidal swell
+        src.start();
+        amb = { ctx: ctx, master: master };
+        scheduleGull();
+      } catch (e) { amb = null; return; }
+    }
+    if (amb.ctx.state === 'suspended') { try { amb.ctx.resume(); } catch (e) {} }
+    var t = amb.ctx.currentTime;
+    amb.master.gain.cancelScheduledValues(t); amb.master.gain.setValueAtTime(amb.master.gain.value, t);
+    amb.master.gain.linearRampToValueAtTime(0.16, t + 1.5);
+  }
+  function stopAmbient() {
+    if (!amb) return;
+    var t = amb.ctx.currentTime;
+    amb.master.gain.cancelScheduledValues(t); amb.master.gain.setValueAtTime(amb.master.gain.value, t);
+    amb.master.gain.linearRampToValueAtTime(0, t + 0.6);
+  }
+  function gullCry() {
+    if (!amb || muted) return;
+    var ctx = amb.ctx, t0 = ctx.currentTime;
+    for (var k = 0; k < 2; k++) {
+      var o = ctx.createOscillator(), g = ctx.createGain(), st = t0 + k * 0.17;
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(1250 + Math.random() * 320, st);
+      o.frequency.exponentialRampToValueAtTime(700, st + 0.15);
+      g.gain.setValueAtTime(0.0001, st); g.gain.linearRampToValueAtTime(0.05, st + 0.02); g.gain.exponentialRampToValueAtTime(0.0008, st + 0.2);
+      o.connect(g); g.connect(amb.master); o.start(st); o.stop(st + 0.24);
+    }
+  }
+  function scheduleGull() {
+    clearTimeout(ambGullT);
+    ambGullT = setTimeout(function () {
+      if (amb && !muted && !document.hidden && scene && scene.port) gullCry();
+      scheduleGull();
+    }, 7000 + Math.random() * 13000);
+  }
+  document.addEventListener('visibilitychange', function () { if (!amb) return; if (document.hidden) stopAmbient(); else if (!muted) startAmbient(); });
   function popWorld(wx, wy, wz, text, opts) { if (!FX) return; var s = worldToScreen(wx, wy, wz); if (s) FX.pop.add(s.x, s.y, text, opts); }
   function burstWorld(wx, wy, wz, opts) { if (!FX) return; var s = worldToScreen(wx, wy, wz); if (s) FX.p.burst(s.x, s.y, opts); }
   function shakeFX(m, d) { if (FX) FX.shake.add(m, d); }
@@ -760,6 +819,7 @@
   // ---- economy HUD + port management ----
   var econHud = null, hudMoney = null, hudFish = null, hudPop = null, advBtn = null, managePanel = null, manageOpen = false;
   var setBtn = null, settingsPanel = null, settingsOpen = false, resetArm = false;
+  var expBtn = null, expPanel = null, expOpen = false;
   var SIM = window.HARBOR_SIM || null;
   function simReady() { return !!(SIM && SIM.port && SIM.port()); }   // active world's port exists
   // idle number notation: 1.2k, 3.40M, 5.7B … Td, then scientific. Stays readable as numbers explode.
@@ -865,6 +925,115 @@
     }
   }
 
+  // ---- dynamic events (Phase 7a): ambient surprises via the hint toast, choices via a modal ----
+  var eventModal = null, shownEvtSeq = 0;
+  function evIcon(id) { return ({ goldrush: '💰', festival: '🎆', castaway: '🛟', raid: '🏴‍☠️', gamble: '🎲', commission: '👑' })[id] || '⚓'; }
+  function evDesc(ev) {
+    var d = ev.data || {};
+    if (ev.id === 'castaway') return 'A castaway raft drifts toward your harbour — haul it in for salvage?';
+    if (ev.id === 'raid') return 'Pirates threaten the port! Pay them off, or fight them off and risk damage for loot.';
+    if (ev.id === 'gamble') return 'A merchant offers a risky venture: wager £' + fmt(d.wager) + ' for a ' + Math.round(d.odds * 100) + '% shot to double it.';
+    if (ev.id === 'commission') return 'The Crown will pay £' + fmt(d.reward) + ' for ' + fmt(d.amt) + ' ' + d.res + ' delivered right now.';
+    return '';
+  }
+  function evButtons(ev) {
+    var d = ev.data || {};
+    if (ev.id === 'castaway') return [{ t: 'Haul it in 🛟', i: 0, cls: 'primary' }];
+    if (ev.id === 'raid') return [{ t: 'Pay £' + fmt(d.tribute), i: 0 }, { t: 'Fight! ⚔ ' + Math.round(d.winOdds * 100) + '%', i: 1, cls: 'primary' }];
+    if (ev.id === 'gamble') return [{ t: 'Decline', i: 1 }, { t: 'Gamble £' + fmt(d.wager), i: 0, cls: 'primary' }];
+    if (ev.id === 'commission') { var s = SIM.state(); var can = ((s.res && s.res[d.res]) || 0) >= d.amt; return [{ t: 'Decline', i: 1 }, { t: 'Fulfil · ' + fmt(d.amt) + ' ' + d.res, i: 0, cls: 'primary', dis: !can }]; }
+    return [{ t: 'OK', i: 1 }];
+  }
+  function ensureEventModal() {
+    if (eventModal) return;
+    eventModal = document.createElement('div'); eventModal.id = 'eventmodal';
+    eventModal.innerHTML = '<div class="ev-card"><div class="ev-ic" id="ev-ic">⚓</div><div class="ev-name" id="ev-name"></div><div class="ev-desc" id="ev-desc"></div><div class="ev-btns" id="ev-btns"></div></div>';
+    wrap.appendChild(eventModal);
+  }
+  function showEventModal(ev) {
+    ensureEventModal();
+    eventModal.querySelector('#ev-ic').textContent = evIcon(ev.id);
+    eventModal.querySelector('#ev-name').textContent = ev.name;
+    eventModal.querySelector('#ev-desc').textContent = evDesc(ev);
+    var bw = eventModal.querySelector('#ev-btns'); bw.innerHTML = '';
+    evButtons(ev).forEach(function (b) {
+      var el = document.createElement('button'); el.className = 'ev-btn' + (b.cls ? ' ' + b.cls : ''); el.textContent = b.t; if (b.dis) el.disabled = true;
+      el.addEventListener('click', function () { onEventChoice(b.i); });
+      bw.appendChild(el);
+    });
+    eventModal.classList.add('show'); sfx('score'); haptic(12);
+  }
+  function onEventChoice(i) {
+    var out = SIM.resolveEvent(i); if (eventModal) eventModal.classList.remove('show');
+    if (!out) return;
+    if (!out.ok) { showHint(out.text || 'Cannot do that yet.'); sfx('lose'); return; }
+    if (out.crate) grantCrate(out.crate);
+    var pw = portWorld();
+    if (out.cash > 0) {
+      if (pw) { popWorld(pw.x, pw.y + 7, pw.z, '+£' + fmt(out.cash), { color: '#ffe08a', size: 22, life: 1.4, vy: -56 }); burstWorld(pw.x, pw.y, pw.z, { count: out.win ? 36 : 24, colors: ['#ffe08a', '#fff3c4', '#ffd24a'], speed: 210, life: 1.1, size: 5 }); }
+      sfx('win'); haptic(24); if (out.win) confettiBurst();
+    } else if (out.cash < 0) { sfx('lose'); haptic(16); }
+    else sfx('tap');
+    if (out.text) showHint(out.text);
+    updateHUD();
+  }
+  function handleEvent(s) {
+    var ev = s.event;
+    if (!ev) { if (eventModal) eventModal.classList.remove('show'); return; }
+    if (ev.seq === shownEvtSeq) return;                                // already surfaced this one
+    shownEvtSeq = ev.seq;
+    if (ev.kind === 'ambient') {                                       // gold rush / festival — a felt boost, toast + sparkle
+      showHint(evIcon(ev.id) + ' ' + ev.name + '! +' + Math.round((ev.data.mult - 1) * 100) + '% output');
+      var pw = portWorld(); if (pw) burstWorld(pw.x, pw.y, pw.z, { count: 24, colors: ['#ffe08a', '#fff3c4', '#ffd24a'], speed: 200, life: 1.1, size: 5 });
+      sfx('win'); haptic(18);
+    } else showEventModal(ev);                                         // choice / collect — a decision modal
+  }
+
+  // ---- expeditions (Phase 7b): send ships on timed voyages (resolve offline), collect rewards ----
+  function toggleExp() {
+    expOpen = !expOpen;
+    if (expOpen) { if (manageOpen) { manageOpen = false; managePanel.classList.remove('show'); } if (settingsOpen) { settingsOpen = false; settingsPanel.classList.remove('show'); } }
+    expPanel.classList.toggle('show', expOpen);
+    if (expOpen) { renderExp(); sfx('tap'); haptic(8); }
+  }
+  function tierStars(t) { return new Array(t + 1).join('★'); }
+  function mmss(s) { var m = Math.floor(s / 60), ss = s % 60; return (m > 0 ? m + 'm ' : '') + ss + 's'; }
+  function renderExp() {
+    if (!simReady()) { expPanel.classList.remove('show'); expOpen = false; return; }
+    var v = SIM.voyages();
+    var h = '<div class="mp-head">Expeditions <span class="ex-slots">' + v.used + '/' + v.slots + '</span><button id="ex-close">✕</button></div>';
+    if (v.active.length) {
+      h += '<div class="mp-sec">At sea</div><div class="mp-grid">';
+      v.active.forEach(function (a) {
+        if (a.ready) h += '<button class="mp-item ex-go ready" data-collect="' + a.seq + '"><span class="mi-n">' + a.name + ' ' + tierStars(a.tier) + '</span><span class="mi-c">Collect 🎁</span></button>';
+        else { var pct = Math.round(100 * (1 - a.remaining / a.total)); h += '<div class="mp-item ex-go"><span class="mi-n">' + a.name + ' ' + tierStars(a.tier) + '</span><span class="mi-c">' + mmss(a.remaining) + '</span><div class="ex-bar"><i style="width:' + pct + '%"></i></div></div>'; }
+      });
+      h += '</div>';
+    }
+    h += '<div class="mp-sec">Send a ship</div><div class="mp-grid">';
+    v.dests.forEach(function (d) {
+      h += '<button class="mp-item ex-send" data-send="' + d.id + '"' + (d.can ? '' : ' disabled') + '><span class="mi-n">' + d.name + ' ' + tierStars(d.tier) + '</span><span class="mi-d">' + mmss(d.secs) + ' voyage</span><span class="mi-c">£' + fmt(d.cost) + '</span></button>';
+    });
+    h += '</div>';
+    if (v.used >= v.slots) h += '<div class="ex-note">All ships are at sea — collect a voyage, or grow your empire for more berths.</div>';
+    expPanel.innerHTML = h;
+    expPanel.querySelector('#ex-close').addEventListener('click', toggleExp);
+    expPanel.querySelectorAll('[data-send]').forEach(function (el) { el.addEventListener('click', function () { if (SIM.startVoyage(el.getAttribute('data-send'))) { sfx('move'); haptic(14); var pw = portWorld(); if (pw) burstWorld(pw.x, pw.y, pw.z, { count: 14, colors: ['#cfe8ff', '#ffffff', '#7fe0d6'], speed: 150, life: 0.8, size: 4 }); renderExp(); updateHUD(); } else sfx('lose'); }); });
+    expPanel.querySelectorAll('[data-collect]').forEach(function (el) { el.addEventListener('click', function () { collectVoyageUI(+el.getAttribute('data-collect')); }); });
+  }
+  function collectVoyageUI(seq) {
+    var out = SIM.collectVoyage(seq); if (!out) return;
+    if (out.crate) grantCrate(out.crate);
+    var rel = out.relic ? grantRandomRelic() : null;
+    var pw = portWorld();
+    if (pw) { popWorld(pw.x, pw.y + 7, pw.z, '+£' + fmt(out.cash), { color: '#ffe08a', size: 22, life: 1.4, vy: -56 }); burstWorld(pw.x, pw.y, pw.z, { count: 30, colors: ['#7fe0d6', '#ffe08a', '#fff3c4'], speed: 210, life: 1.1, size: 5 }); }
+    var extra = out.res ? (' + ' + Object.keys(out.res).map(function (k) { return fmt(out.res[k]) + ' ' + k; }).join(', ')) : '';
+    showHint('⛵ ' + out.name + ' returned! +£' + fmt(out.cash) + extra + (out.crate ? ' + a crate 🎁' : ''));
+    sfx('win'); haptic(26); confettiBurst();
+    if (rel) announceRelic(rel);
+    renderExp(); updateHUD();
+  }
+
   // ---- Legacy / Prestige: meta progression persisted across runs (via Retention, survives a wipe) ----
   var LEGACY_TREE = [
     { id: 'prod', name: 'Master Shipwrights', desc: '+25% global production / lvl', base: 3, mul: 1.6, per: 0.25, max: 30, meta: 'prodMul' },
@@ -891,8 +1060,38 @@
     var tr = legacyTreeMap(); tr[id] = (tr[id] || 0) + 1; Retention.set(GAME, 'legacyTree', tr);
     computeMeta(); return true;
   }
+  // ---- relics & collection sets (Phase 7c): permanent set-bonuses; stored in Retention so they
+  // survive prestige. Relics drop from expeditions, rare events, and Legendary crates. ----
+  var RELIC_SETS = [
+    { id: 'carto', name: 'Cartographer’s Cache', bonus: '+1 expedition ship', meta: 'voyageSlots', amt: 1, relics: ['Brass Astrolabe', 'Tattered Sea Chart', 'Star Compass'] },
+    { id: 'smug', name: 'Smuggler’s Hoard', bonus: '+25% faster voyages', meta: 'voyageSpeed', amt: 0.25, relics: ['Black Pearl', 'Forged Ledger', 'Hidden Cove Key'] },
+    { id: 'salt', name: 'Old Salt’s Charms', bonus: '+15% storm resistance', meta: 'hazardResist', amt: 0.15, relics: ['Whale-bone Talisman', 'Mermaid’s Tear', 'Storm Glass'] },
+    { id: 'prince', name: 'Merchant Prince’s Regalia', bonus: '+30% production', meta: 'prodMul', amt: 0.30, relics: ['Gilded Sextant', 'Ivory Abacus', 'Royal Seal'] }
+  ];
+  function ownedRelics() { return (window.Retention && Retention.get(GAME, 'relics', {})) || {}; }
+  function hasRelic(id) { return !!ownedRelics()[id]; }
+  function setById(id) { for (var i = 0; i < RELIC_SETS.length; i++) if (RELIC_SETS[i].id === id) return RELIC_SETS[i]; return null; }
+  function setComplete(set) { for (var i = 0; i < set.relics.length; i++) if (!hasRelic(set.id + i)) return false; return true; }
+  function relicCount() { var o = ownedRelics(), n = 0; for (var k in o) if (o[k]) n++; return n; }
+  function totalRelics() { var n = 0; RELIC_SETS.forEach(function (s) { n += s.relics.length; }); return n; }
+  function allRelicIds() { var a = []; RELIC_SETS.forEach(function (s) { s.relics.forEach(function (_, ri) { a.push(s.id + ri); }); }); return a; }
+  function unownedRelicIds() { var o = ownedRelics(); return allRelicIds().filter(function (id) { return !o[id]; }); }
+  function relicInfo(id) { var setId = id.replace(/[0-9]+$/, ''), ri = +id.slice(setId.length), s = setById(setId); return s ? { name: s.relics[ri], set: s.name, setId: setId } : null; }
+  function grantRelicById(id) {
+    if (!window.Retention || hasRelic(id)) return null;
+    var o = ownedRelics(); o[id] = true; Retention.set(GAME, 'relics', o); computeMeta();
+    var info = relicInfo(id); if (info) { var s = setById(info.setId); info.completed = s ? setComplete(s) : false; info.bonus = s ? s.bonus : ''; }
+    return info;
+  }
+  function grantRandomRelic() { var pool = unownedRelicIds(); if (!pool.length) return null; return grantRelicById(pool[Math.floor(Math.random() * pool.length)]); }
+  function announceRelic(rel) {
+    if (!rel) return;
+    if (rel.completed) { showHint('🏺 ' + rel.name + ' — ' + rel.set + ' COMPLETE! ' + rel.bonus); confettiBurst(); sfx('win'); haptic([10, 40, 20, 40]); }
+    else { showHint('🏺 Relic found: ' + rel.name + ' · ' + rel.set); sfx('score'); haptic(20); }
+  }
+
   function computeMeta() {
-    var tr = legacyTreeMap(), M = { prodMul: 1, sellMul: 1, costMul: 1, startMoney: 0, offlineHours: 8, hazardResist: 0, routeMul: 1 };
+    var tr = legacyTreeMap(), M = { prodMul: 1, sellMul: 1, costMul: 1, startMoney: 0, offlineHours: 8, hazardResist: 0, routeMul: 1, voyageSpeed: 1, voyageSlots: 0 };
     LEGACY_TREE.forEach(function (nd) {
       var amt = nd.per * (tr[nd.id] || 0);
       if (nd.meta === 'prodMul') M.prodMul = 1 + amt;
@@ -909,6 +1108,14 @@
       if (bp.meta === 'prodMul') M.prodMul += bp.amt; else if (bp.meta === 'sellMul') M.sellMul += bp.amt;
       else if (bp.meta === 'routeMul') M.routeMul += bp.amt; else if (bp.meta === 'offlineHours') M.offlineHours += bp.amt;
       else if (bp.meta === 'hazardResist') M.hazardResist += bp.amt;
+    });
+    // completed relic sets stack permanent passives on top (Phase 7c)
+    RELIC_SETS.forEach(function (set) {
+      if (!setComplete(set)) return;
+      if (set.meta === 'prodMul') M.prodMul += set.amt;
+      else if (set.meta === 'hazardResist') M.hazardResist += set.amt;
+      else if (set.meta === 'voyageSpeed') M.voyageSpeed += set.amt;
+      else if (set.meta === 'voyageSlots') M.voyageSlots += set.amt;
     });
     if (SIM && SIM.applyMeta) SIM.applyMeta(M);
     return M;
@@ -970,6 +1177,13 @@
     var owned = ownedBlueprints().length;
     html += '<div class="lg-sec">Blueprints (' + owned + '/' + BLUEPRINTS.length + ')</div>';
     BLUEPRINTS.forEach(function (bp) { var has = window.Progress && Progress.unlocked(GAME, bp.id); html += '<div class="lg-bp' + (has ? '' : ' locked') + '"><span class="bp-n">' + (has ? '📜 ' + bp.name : '🔒 ???') + '</span><span class="bp-d">' + (has ? bp.desc : 'Find in a Legendary crate') + '</span></div>'; });
+    html += '<div class="lg-sec">Relics (' + relicCount() + '/' + totalRelics() + ')</div>';
+    RELIC_SETS.forEach(function (set) {
+      var done = setComplete(set);
+      html += '<div class="lg-relset' + (done ? ' done' : '') + '"><div class="rs-head"><span class="rs-n">' + set.name + '</span><span class="rs-b">' + set.bonus + (done ? ' ✓' : '') + '</span></div><div class="rs-dots">';
+      set.relics.forEach(function (rn, ri) { var has = hasRelic(set.id + ri); html += '<span class="rs-dot' + (has ? ' on' : '') + '">' + (has ? '◆ ' + rn : '◇ ???') + '</span>'; });
+      html += '</div></div>';
+    });
     var got = 0; ACHIEVEMENTS.forEach(function (a) { if (achOwned(a.id)) got++; });
     html += '<div class="lg-sec">Achievements (' + got + '/' + ACHIEVEMENTS.length + ')</div><div class="lg-achgrid">';
     ACHIEVEMENTS.forEach(function (a) { var has = achOwned(a.id); html += '<div class="lg-ach' + (has ? '' : ' locked') + '">' + (has ? '🏆' : '🔒') + '<span>' + (has ? a.name : '???') + '</span></div>'; });
@@ -1083,7 +1297,7 @@
     } else {                                                           // legendary — a blueprint (or jackpot Legacy)
       tier = 'Legendary'; color = '#ff9a5a'; var pool = unownedBlueprints();
       if (pool.length) { var bp = pool[Math.floor(Math.random() * pool.length)]; if (window.Progress) Progress.unlock(GAME, bp.id); computeMeta(); title = bp.name; sub = bp.desc; }
-      else { var jp = 15 + Math.floor(Math.random() * 25); setLegacyBal(legacyBal() + jp); title = '+' + jp + ' ✦ Legacy'; sub = 'Jackpot!'; }
+      else { var rel = grantRandomRelic(); if (rel) { title = '🏺 ' + rel.name; sub = rel.set + (rel.completed ? ' — set complete!' : ''); } else { var jp = 15 + Math.floor(Math.random() * 25); setLegacyBal(legacyBal() + jp); title = '+' + jp + ' ✦ Legacy'; sub = 'Jackpot!'; } }
     }
     return { tier: tier, color: color, title: title, sub: sub };
   }
@@ -1139,13 +1353,14 @@
     var nBtn = document.createElement('button'); nBtn.id = 'netbtn'; nBtn.textContent = 'Trade network'; nBtn.addEventListener('click', openTrade);
     legacyBtn = document.createElement('button'); legacyBtn.id = 'legacybtn'; legacyBtn.textContent = '✦ Legacy'; legacyBtn.style.display = 'none'; legacyBtn.addEventListener('click', openLegacy);
     crateBtn = document.createElement('button'); crateBtn.id = 'cratebtn'; crateBtn.textContent = '🎁'; crateBtn.style.display = 'none'; crateBtn.addEventListener('click', openCrate);
+    expBtn = document.createElement('button'); expBtn.id = 'expbtn'; expBtn.textContent = '⛵ Expeditions'; expBtn.addEventListener('click', toggleExp);
     advBtn = document.createElement('button'); advBtn.id = 'advbtn'; advBtn.textContent = 'Advance era'; advBtn.style.display = 'none'; advBtn.addEventListener('click', doAdvance);
     // top row: resource chips + mute + settings only (keeps it short so the era/goal bars stay clear)
     econHud.appendChild(muteBtn); econHud.appendChild(setBtn);
     wrap.appendChild(econHud);
     // bottom action bar: the primary buttons, thumb-reachable, so the top never overflows
     actionBar = document.createElement('div'); actionBar.id = 'actionbar';
-    actionBar.appendChild(advBtn); actionBar.appendChild(nBtn); actionBar.appendChild(legacyBtn); actionBar.appendChild(crateBtn); actionBar.appendChild(mBtn);
+    actionBar.appendChild(advBtn); actionBar.appendChild(nBtn); actionBar.appendChild(expBtn); actionBar.appendChild(legacyBtn); actionBar.appendChild(crateBtn); actionBar.appendChild(mBtn);
     wrap.appendChild(actionBar);
 
     // always-visible era progress bar (goal-gradient carrot)
@@ -1163,13 +1378,16 @@
 
     settingsPanel = document.createElement('div'); settingsPanel.id = 'settingspanel';
     wrap.appendChild(settingsPanel);
+
+    expPanel = document.createElement('div'); expPanel.id = 'exppanel';
+    wrap.appendChild(expPanel);
     updateHUD();
   }
 
-  var BUILD_TAG = 'v37';
+  var BUILD_TAG = 'v42';
   function toggleSettings() {
     settingsOpen = !settingsOpen;
-    if (settingsOpen && manageOpen) { manageOpen = false; managePanel.classList.remove('show'); }
+    if (settingsOpen) { if (manageOpen) { manageOpen = false; managePanel.classList.remove('show'); } if (expOpen) { expOpen = false; expPanel.classList.remove('show'); } }
     settingsPanel.classList.toggle('show', settingsOpen);
     resetArm = false;
     if (settingsOpen) { renderSettings(); sfx('tap'); haptic(8); }
@@ -1238,7 +1456,7 @@
     var on = simReady();
     econHud.classList.toggle('show', on); if (actionBar) actionBar.classList.toggle('show', on && !cine);
     if (eraBar) eraBar.classList.toggle('show', on && !cine);
-    if (!on) { if (managePanel) managePanel.classList.remove('show'); if (settingsPanel) { settingsPanel.classList.remove('show'); settingsOpen = false; } return; }
+    if (!on) { if (managePanel) managePanel.classList.remove('show'); if (settingsPanel) { settingsPanel.classList.remove('show'); settingsOpen = false; } if (expPanel) { expPanel.classList.remove('show'); expOpen = false; } return; }
     var s = SIM.state();
     hudFish.textContent = fmt(s.res.fish); hudPop.textContent = fmt(s.pop);
     if (hudFish.parentNode) hudFish.parentNode.classList.toggle('full', s.res.fish >= s.caps.fish * 0.98);  // storage-full nudge
@@ -1263,16 +1481,19 @@
     if (mBtn) { var ready = (s.contracts || []).some(function (c) { return c.can; }); mBtn.classList.toggle('order-ready', ready && !manageOpen); }
     checkGoals(s);
     handleHazard(s);
+    handleEvent(s);
     checkAchievements(s);
     trackDaily(s);
     if (scene.port && ambient && Math.abs((s.buildings ? s.buildings.length : 0) - (ambient.dev || 0)) >= 3) ambient = null;   // refresh harbour traffic as you grow
     // reveal the Legacy button once prestige is relevant; pulse when a prestige is available
     if (legacyBtn) { var lp = s.prestige || { can: false }; var show = lp.can || legacyBal() > 0; legacyBtn.style.display = show ? '' : 'none'; legacyBtn.classList.toggle('ready', lp.can && !legacyOpen); }
     if (crateBtn) { var nc = crateCount(); crateBtn.style.display = nc > 0 ? '' : 'none'; crateBtn.setAttribute('data-n', nc); }
+    if (expBtn) { var rd = (s.voyages && s.voyages.ready) || 0; expBtn.classList.toggle('hasready', rd > 0); expBtn.setAttribute('data-n', rd); }
     if (legacyOpen) renderLegacy();
     if (manageOpen) renderManage();
+    if (expOpen) renderExp();
   }
-  function toggleManage() { manageOpen = !manageOpen; if (manageOpen && settingsOpen) { settingsOpen = false; settingsPanel.classList.remove('show'); } managePanel.classList.toggle('show', manageOpen); if (manageOpen) renderManage(); }
+  function toggleManage() { manageOpen = !manageOpen; if (manageOpen) { if (settingsOpen) { settingsOpen = false; settingsPanel.classList.remove('show'); } if (expOpen) { expOpen = false; expPanel.classList.remove('show'); } } managePanel.classList.toggle('show', manageOpen); if (manageOpen) renderManage(); }
   function renderManage() {
     if (!simReady()) { managePanel.classList.remove('show'); manageOpen = false; return; }
     var s = SIM.state(), BT = SIM.BT, html = '<div class="mp-head">Build & upgrade<button id="mp-close">✕</button></div>';
@@ -1511,7 +1732,17 @@
     buyLegacy: function (id) { return buyLegacy(id); }, fmt: function (n) { return fmt(n); }, fxCount: function () { return FX ? FX.p.list.length : 0; },
     grantCrate: function (n) { grantCrate(n || 1); return crateCount(); }, crates: function () { return crateCount(); }, openCrate: function () { openCrate(); },
     rollCrate: function () { return rollCrate(); }, blueprints: function () { return ownedBlueprints().map(function (b) { return b.id; }); },
-    unlockAll: function () { HARBOR_BIOME_ORDER.forEach(function (id) { if (unlocked.indexOf(id) < 0) unlocked.push(id); }); saveUnlocked(); if (buildSelector._set) buildSelector._set(); }
+    unlockAll: function () { HARBOR_BIOME_ORDER.forEach(function (id) { if (unlocked.indexOf(id) < 0) unlocked.push(id); }); saveUnlocked(); if (buildSelector._set) buildSelector._set(); },
+    startAmbient: function () { startAmbient(); }, ambient_audio: function () { return amb ? { state: amb.ctx.state, gain: +amb.master.gain.value.toFixed(3) } : null; },
+    fireEvent: function (id) { var ev = SIM.fireEvent(id); if (ev) { updateHUD(); } return ev; },
+    chooseEvent: function (i) { return onEventChoice(i); },
+    event: function () { return SIM.event(); },
+    voyages: function () { return SIM.voyages(); },
+    startVoyage: function (id) { var r = SIM.startVoyage(id); if (r) { updateHUD(); if (expOpen) renderExp(); } return r; },
+    collectVoyage: function (seq) { return collectVoyageUI(seq); },
+    openExp: function () { if (!expOpen) toggleExp(); },
+    relics: function () { return { count: relicCount(), total: totalRelics(), owned: ownedRelics(), meta: SIM.meta() }; },
+    grantRelic: function (id) { var r = id ? grantRelicById(id) : grantRandomRelic(); if (r) { announceRelic(r); updateHUD(); } return r; }
   };
 
   if (canvas && canvas.getContext) boot();

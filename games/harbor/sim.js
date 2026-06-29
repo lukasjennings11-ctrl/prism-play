@@ -77,7 +77,7 @@
 
   // META: permanent cross-prestige multipliers (computed in game.js from the Legacy tree, fed in via
   // applyMeta so the sim stays headless-testable). Defaults are the no-prestige baseline.
-  var META = { prodMul: 1, sellMul: 1, costMul: 1, startMoney: 0, offlineHours: 8, hazardResist: 0, routeMul: 1 };
+  var META = { prodMul: 1, sellMul: 1, costMul: 1, startMoney: 0, offlineHours: 8, hazardResist: 0, routeMul: 1, voyageSpeed: 1, voyageSlots: 0 };
   function applyMeta(m) { if (!m) return; for (var k in META) if (typeof m[k] === 'number') META[k] = m[k]; }
 
   // TIDE: today's daily market modifier (computed in game.js from the seeded daily RNG, fed in here).
@@ -108,6 +108,8 @@
       active: 'green', ports: {},
       network: { xp: 0, level: 1, routes: [] },
       hazard: { t: 0, next: hzRand(70, 150), phase: 'idle', strikeId: 0, last: null }, crash: null,
+      evt: { t: 0, next: evRand(60, 130), active: null, lastId: '', seq: 0 },
+      voyages: [], voyageSeq: 0,
       stats: { storms: 0, shipped: 0 }
     };
   }
@@ -145,6 +147,8 @@
       CUR = pt; ensureContracts();
     }
     if (!S.hazard) S.hazard = { t: 0, next: hzRand(70, 150), phase: 'idle', strikeId: 0, last: null };
+    if (!S.evt) S.evt = { t: 0, next: evRand(60, 130), active: null, lastId: '', seq: 0 };
+    if (!S.voyages) S.voyages = [];
     if (typeof S.crash === 'undefined') S.crash = null;
     if (!S.stats) S.stats = { storms: 0 };
     if (typeof S.stats.shipped !== 'number') S.stats.shipped = 0;
@@ -311,6 +315,133 @@
   }
   function crashMul(res) { return (S.crash && S.crash.res === res) ? 0.45 : 1; }
 
+  // ---- dynamic events: a second scheduler (alongside hazards) that fires varied surprises and
+  // player-choice decisions. Never wipes money/era; ignoring a choice resolves to a safe default. ----
+  var EV_DEFS = [
+    { id: 'goldrush', kind: 'ambient', name: 'Gold Rush', minEra: 1, w: 3 },
+    { id: 'festival', kind: 'ambient', name: 'Harbour Festival', minEra: 1, w: 2 },
+    { id: 'castaway', kind: 'collect', name: 'Castaway Raft', minEra: 0, w: 2 },
+    { id: 'raid', kind: 'choice', name: 'Pirate Raid', minEra: 2, w: 2 },
+    { id: 'gamble', kind: 'choice', name: "Merchant's Gamble", minEra: 1, w: 2 },
+    { id: 'commission', kind: 'choice', name: 'Royal Commission', minEra: 1, w: 2 }
+  ];
+  function evRand(a, b) { return a + Math.random() * (b - a); }
+  function evDef(id) { for (var i = 0; i < EV_DEFS.length; i++) if (EV_DEFS[i].id === id) return EV_DEFS[i]; return null; }
+  function evPick() {
+    var elig = EV_DEFS.filter(function (e) { return S.era >= e.minEra; });
+    var pool = elig.filter(function (e) { return e.id !== (S.evt.lastId || ''); });
+    if (!pool.length) pool = elig; if (!pool.length) return null;
+    var tot = 0; pool.forEach(function (e) { tot += e.w; });
+    var r = Math.random() * tot;
+    for (var i = 0; i < pool.length; i++) { r -= pool[i].w; if (r <= 0) return pool[i]; }
+    return pool[pool.length - 1];
+  }
+  function evData(def) {
+    var era = S.era, money = S.money, d = portDef(CUR || { buildings: [] });
+    if (def.id === 'goldrush') return { mult: 1.8, secs: 30 };
+    if (def.id === 'festival') return { mult: 1.5, secs: 30, fever: true };
+    if (def.id === 'castaway') return {};
+    if (def.id === 'raid') return { tribute: Math.round(Math.max(30, Math.min(money * 0.12, 60 * Math.pow(2, era)))), winOdds: clamp(0.45 + 0.12 * d.wall + 0.06 * d.light, 0.45, 0.92) };
+    if (def.id === 'gamble') return { wager: Math.round(Math.max(40, Math.min(money * 0.15, 90 * Math.pow(2, era)))), odds: 0.6 };
+    if (def.id === 'commission') { var res = era >= 2 ? ['fish', 'timber', 'goods'][Math.floor(Math.random() * 3)] : 'fish'; var amt = Math.round(40 * (1 + era * 0.6)); return { res: res, amt: amt, reward: Math.round(amt * basePrice(res) * 2.4) }; }
+    return {};
+  }
+  function applyAmbient(ev) { if (ev.id === 'goldrush' || ev.id === 'festival') setBoost(ev.data.mult, ev.data.secs); }
+  function fireEvent(id) {
+    if (!S) return null; setActive(S.active);
+    var def = evDef(id); if (!def) return null;
+    S.evt.seq = (S.evt.seq || 0) + 1;
+    S.evt.active = { id: def.id, kind: def.kind, name: def.name, seq: S.evt.seq, ttl: def.kind === 'ambient' ? 7 : 40, data: evData(def) };
+    S.evt.lastId = def.id;
+    if (def.kind === 'ambient') applyAmbient(S.evt.active);
+    save(); return S.evt.active;
+  }
+  function autoResolveEvent(ev) {                                       // safe, non-punishing timeout defaults
+    if (ev.id === 'raid') S.money = Math.max(0, S.money - Math.round(ev.data.tribute * 0.5));
+  }
+  function tickEvents(dt) {
+    if (dt >= 5 || !S.ports || !S.founded) return;                     // live-play only (offline is a safe window)
+    var e = S.evt; e.t += dt;
+    if (e.active) {
+      e.active.ttl -= dt;
+      if (e.active.ttl <= 0) { if (e.active.kind === 'choice') autoResolveEvent(e.active); e.active = null; e.t = 0; e.next = evRand(70, 150); }
+      return;
+    }
+    if (S.era < 1 && Math.random() > 0.4) { /* go easy in starter era */ }
+    if (e.t >= e.next) { var def = evPick(); e.t = 0; e.next = evRand(95, 200); if (def) fireEvent(def.id); }
+  }
+  // player resolves the active choice/collect event; returns an outcome descriptor for the UI layer
+  function resolveEvent(choice) {
+    if (!S || !S.evt || !S.evt.active) return null;
+    setActive(S.active);
+    var ev = S.evt.active, out = { id: ev.id, ok: true, cash: 0, crate: 0 };
+    if (ev.id === 'castaway') { out.cash = Math.round(Math.max(40, S.money * 0.06)); S.money += out.cash; out.crate = Math.random() < 0.5 ? 1 : 0; out.text = 'Salvaged the drifting raft!'; }
+    else if (ev.id === 'raid') {
+      if (choice === 0) { out.cash = -ev.data.tribute; S.money = Math.max(0, S.money - ev.data.tribute); out.text = 'Tribute paid — they sail on.'; }
+      else if (Math.random() < ev.data.winOdds) { out.cash = ev.data.tribute * 2; S.money += out.cash; out.crate = 1; out.win = true; out.text = 'Routed them and seized loot!'; }
+      else { strike(S.active); out.win = false; out.text = 'They breached the harbour!'; }
+    }
+    else if (ev.id === 'gamble') {
+      if (choice === 0) { if (Math.random() < ev.data.odds) { out.cash = ev.data.wager; S.money += out.cash; out.win = true; out.text = 'The venture paid off!'; } else { out.cash = -ev.data.wager; S.money = Math.max(0, S.money - ev.data.wager); out.win = false; out.text = 'The ship never returned…'; } }
+      else out.text = 'Declined the wager.';
+    }
+    else if (ev.id === 'commission') {
+      if (choice === 0) { var p = CUR; if (p && (p.res[ev.data.res] || 0) >= ev.data.amt) { p.res[ev.data.res] -= ev.data.amt; out.cash = ev.data.reward; S.money += out.cash; out.text = 'Commission fulfilled!'; } else { out.ok = false; out.text = 'Not enough ' + ev.data.res + '.'; return out; } }
+      else out.text = 'Declined the commission.';
+    }
+    if (out.cash > 0) S.lifetimeMoney = (S.lifetimeMoney || 0) + out.cash;
+    S.evt.lastId = ev.id; S.evt.active = null; S.evt.t = 0; S.evt.next = evRand(95, 200);
+    save(); return out;
+  }
+
+  // ---- expeditions: timed voyages that resolve on wall-clock time, so they finish while you're
+  // away (no tick needed — ready when now() >= endsAt). Send a ship, wait, collect a reward roll. ----
+  var DESTINATIONS = [
+    { id: 'cove', name: 'Smuggler’s Cove', tier: 1, secs: 120 },
+    { id: 'reef', name: 'Coral Reef', tier: 2, secs: 360 },
+    { id: 'isle', name: 'Lost Isle', tier: 3, secs: 900 },
+    { id: 'trench', name: 'The Deep Trench', tier: 4, secs: 2400 }
+  ];
+  function destDef(id) { for (var i = 0; i < DESTINATIONS.length; i++) if (DESTINATIONS[i].id === id) return DESTINATIONS[i]; return null; }
+  function voyageSlots() { return 1 + Math.min(2, Math.floor((S.era || 0) / 2)) + (META.voyageSlots || 0); }
+  function voyageCost(d) { return Math.round(120 * d.tier * (1 + (S.era || 0) * 0.5)); }
+  function canStartVoyage(id) { var d = destDef(id); return !!(d && S && S.money >= voyageCost(d) && (S.voyages || []).length < voyageSlots()); }
+  function startVoyage(id) {
+    var d = destDef(id); if (!canStartVoyage(id)) return false;
+    S.money -= voyageCost(d); S.voyages = S.voyages || [];
+    S.voyages.push({ id: d.id, startedAt: now(), endsAt: now() + d.secs * 1000 / (META.voyageSpeed || 1), seq: (S.voyageSeq = (S.voyageSeq || 0) + 1) });
+    save(); return true;
+  }
+  function voyageReady(v) { return now() >= v.endsAt; }
+  function rollVoyage(d) {
+    var era = S.era || 0, cost = voyageCost(d), out = { cash: 0, res: null, crate: 0, relic: 0 };
+    out.cash = Math.round(cost * (2.2 + d.tier * 0.4) * (0.85 + Math.random() * 0.5));
+    if (Math.random() < 0.5) { var r = ['fish', 'timber', 'goods'][Math.floor(Math.random() * 3)]; out.res = {}; out.res[r] = Math.round(20 * d.tier * (1 + era * 0.4)); }
+    if (Math.random() < 0.12 * d.tier) out.crate = 1;
+    if (Math.random() < 0.05 * d.tier) out.relic = 1;                  // relics wired up in Phase 7c
+    return out;
+  }
+  function collectVoyage(seq) {
+    if (!S || !S.voyages) return null;
+    var idx = -1; for (var i = 0; i < S.voyages.length; i++) if (S.voyages[i].seq === seq) idx = i;
+    if (idx < 0) return null; var v = S.voyages[idx], d = destDef(v.id); if (!d || !voyageReady(v)) return null;
+    var out = rollVoyage(d); out.id = v.id; out.name = d.name; out.tier = d.tier;
+    S.money += out.cash; S.lifetimeMoney = (S.lifetimeMoney || 0) + out.cash;
+    if (out.res) { var p = S.ports[S.active]; if (p) for (var k in out.res) p.res[k] = (p.res[k] || 0) + out.res[k]; }
+    S.voyages.splice(idx, 1); save(); return out;
+  }
+  function voyageState() {
+    var active = (S.voyages || []).map(function (v) {
+      var d = destDef(v.id), rem = Math.max(0, Math.ceil((v.endsAt - now()) / 1000));
+      return { seq: v.seq, id: v.id, name: d ? d.name : v.id, tier: d ? d.tier : 1, total: d ? d.secs : 1, remaining: rem, ready: rem <= 0 };
+    });
+    return {
+      slots: voyageSlots(), used: active.length, ready: active.filter(function (a) { return a.ready; }).length,
+      active: active,
+      dests: DESTINATIONS.map(function (d) { return { id: d.id, name: d.name, tier: d.tier, secs: d.secs, cost: voyageCost(d), can: canStartVoyage(d.id) }; })
+    };
+  }
+
   // ---- repair / rebuild (the comeback money sink; salvage-discounted vs a fresh build) ----
   function repairCost(b) { var t = BT[b.type], miss = (100 - bhp(b)) / 100; return Math.max(1, Math.round(t.cost * 0.5 * miss * Math.pow(1.3, (b.level || 1) - 1))); }
   function canRepair(i) { var b = CUR && CUR.buildings[i]; return !!b && bhp(b) < 100 && S.money >= repairCost(b); }
@@ -363,6 +494,7 @@
     setActive(S.active);                                            // restore scope to the active port
     delta += tickRoutes(dt);                                        // trade routes ship cargo + pay tariffs
     tickHazard(dt);                                                 // storms / market crashes (live play only)
+    tickEvents(dt);                                                 // dynamic events (gold rush, raids, commissions…)
     if (delta > 0) S.lifetimeMoney = (S.lifetimeMoney || 0) + delta;
     S.money = Math.max(0, (S.money + delta) || 0);
   }
@@ -440,6 +572,8 @@
       network: networkView(),
       hazard: S.hazard ? { phase: S.hazard.phase || 'idle', port: S.hazard.port || null, kind: S.hazard.kind || null, in: Math.max(0, Math.ceil(S.hazard.warn || 0)), strikeId: S.hazard.strikeId || 0, last: S.hazard.last || null } : { phase: 'idle', strikeId: 0, last: null },
       crash: S.crash ? { res: S.crash.res, t: Math.ceil(S.crash.t) } : null,
+      event: (S.evt && S.evt.active) ? { id: S.evt.active.id, name: S.evt.active.name, kind: S.evt.active.kind, seq: S.evt.active.seq, ttl: Math.max(0, Math.ceil(S.evt.active.ttl)), data: S.evt.active.data } : null,
+      voyages: voyageState(),
       stats: { storms: (S.stats && S.stats.storms) || 0, shipped: Math.floor((S.stats && S.stats.shipped) || 0), ports: Object.keys(S.ports).length },
       ports: portList()
     };
@@ -468,6 +602,8 @@
     addRoute: addRoute, canAddRoute: canAddRoute, upgradeRoute: upgradeRoute, removeRoute: removeRoute, routeCost: routeCost, network: networkView,
     repair: repair, canRepair: canRepair, repairCost: function (i) { return CUR && CUR.buildings[i] ? repairCost(CUR.buildings[i]) : 0; },
     strikePort: function (id) { if (S) { strike(id || S.active); save(); } },   // debug/test: force a storm strike now
+    fireEvent: fireEvent, resolveEvent: resolveEvent, event: function () { return S && S.evt ? S.evt.active : null; },
+    startVoyage: startVoyage, collectVoyage: collectVoyage, canStartVoyage: canStartVoyage, voyages: voyageState,
     newGame: function () { S = fresh(); setActive('green'); save(); return snapshot(); },
     load: function () { load(); return snapshot(); },
     state: function (id) { return S ? snapshot(id) : null; },
