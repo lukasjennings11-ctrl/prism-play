@@ -819,6 +819,7 @@
   // ---- economy HUD + port management ----
   var econHud = null, hudMoney = null, hudFish = null, hudPop = null, advBtn = null, managePanel = null, manageOpen = false;
   var setBtn = null, settingsPanel = null, settingsOpen = false, resetArm = false;
+  var expBtn = null, expPanel = null, expOpen = false;
   var SIM = window.HARBOR_SIM || null;
   function simReady() { return !!(SIM && SIM.port && SIM.port()); }   // active world's port exists
   // idle number notation: 1.2k, 3.40M, 5.7B … Td, then scientific. Stays readable as numbers explode.
@@ -986,6 +987,49 @@
       var pw = portWorld(); if (pw) burstWorld(pw.x, pw.y, pw.z, { count: 24, colors: ['#ffe08a', '#fff3c4', '#ffd24a'], speed: 200, life: 1.1, size: 5 });
       sfx('win'); haptic(18);
     } else showEventModal(ev);                                         // choice / collect — a decision modal
+  }
+
+  // ---- expeditions (Phase 7b): send ships on timed voyages (resolve offline), collect rewards ----
+  function toggleExp() {
+    expOpen = !expOpen;
+    if (expOpen) { if (manageOpen) { manageOpen = false; managePanel.classList.remove('show'); } if (settingsOpen) { settingsOpen = false; settingsPanel.classList.remove('show'); } }
+    expPanel.classList.toggle('show', expOpen);
+    if (expOpen) { renderExp(); sfx('tap'); haptic(8); }
+  }
+  function tierStars(t) { return new Array(t + 1).join('★'); }
+  function mmss(s) { var m = Math.floor(s / 60), ss = s % 60; return (m > 0 ? m + 'm ' : '') + ss + 's'; }
+  function renderExp() {
+    if (!simReady()) { expPanel.classList.remove('show'); expOpen = false; return; }
+    var v = SIM.voyages();
+    var h = '<div class="mp-head">Expeditions <span class="ex-slots">' + v.used + '/' + v.slots + '</span><button id="ex-close">✕</button></div>';
+    if (v.active.length) {
+      h += '<div class="mp-sec">At sea</div><div class="mp-grid">';
+      v.active.forEach(function (a) {
+        if (a.ready) h += '<button class="mp-item ex-go ready" data-collect="' + a.seq + '"><span class="mi-n">' + a.name + ' ' + tierStars(a.tier) + '</span><span class="mi-c">Collect 🎁</span></button>';
+        else { var pct = Math.round(100 * (1 - a.remaining / a.total)); h += '<div class="mp-item ex-go"><span class="mi-n">' + a.name + ' ' + tierStars(a.tier) + '</span><span class="mi-c">' + mmss(a.remaining) + '</span><div class="ex-bar"><i style="width:' + pct + '%"></i></div></div>'; }
+      });
+      h += '</div>';
+    }
+    h += '<div class="mp-sec">Send a ship</div><div class="mp-grid">';
+    v.dests.forEach(function (d) {
+      h += '<button class="mp-item ex-send" data-send="' + d.id + '"' + (d.can ? '' : ' disabled') + '><span class="mi-n">' + d.name + ' ' + tierStars(d.tier) + '</span><span class="mi-d">' + mmss(d.secs) + ' voyage</span><span class="mi-c">£' + fmt(d.cost) + '</span></button>';
+    });
+    h += '</div>';
+    if (v.used >= v.slots) h += '<div class="ex-note">All ships are at sea — collect a voyage, or grow your empire for more berths.</div>';
+    expPanel.innerHTML = h;
+    expPanel.querySelector('#ex-close').addEventListener('click', toggleExp);
+    expPanel.querySelectorAll('[data-send]').forEach(function (el) { el.addEventListener('click', function () { if (SIM.startVoyage(el.getAttribute('data-send'))) { sfx('move'); haptic(14); var pw = portWorld(); if (pw) burstWorld(pw.x, pw.y, pw.z, { count: 14, colors: ['#cfe8ff', '#ffffff', '#7fe0d6'], speed: 150, life: 0.8, size: 4 }); renderExp(); updateHUD(); } else sfx('lose'); }); });
+    expPanel.querySelectorAll('[data-collect]').forEach(function (el) { el.addEventListener('click', function () { collectVoyageUI(+el.getAttribute('data-collect')); }); });
+  }
+  function collectVoyageUI(seq) {
+    var out = SIM.collectVoyage(seq); if (!out) return;
+    if (out.crate) grantCrate(out.crate);
+    var pw = portWorld();
+    if (pw) { popWorld(pw.x, pw.y + 7, pw.z, '+£' + fmt(out.cash), { color: '#ffe08a', size: 22, life: 1.4, vy: -56 }); burstWorld(pw.x, pw.y, pw.z, { count: 30, colors: ['#7fe0d6', '#ffe08a', '#fff3c4'], speed: 210, life: 1.1, size: 5 }); }
+    var extra = out.res ? (' + ' + Object.keys(out.res).map(function (k) { return fmt(out.res[k]) + ' ' + k; }).join(', ')) : '';
+    showHint('⛵ ' + out.name + ' returned! +£' + fmt(out.cash) + extra + (out.crate ? ' + a crate 🎁' : ''));
+    sfx('win'); haptic(26); confettiBurst();
+    renderExp(); updateHUD();
   }
 
   // ---- Legacy / Prestige: meta progression persisted across runs (via Retention, survives a wipe) ----
@@ -1262,13 +1306,14 @@
     var nBtn = document.createElement('button'); nBtn.id = 'netbtn'; nBtn.textContent = 'Trade network'; nBtn.addEventListener('click', openTrade);
     legacyBtn = document.createElement('button'); legacyBtn.id = 'legacybtn'; legacyBtn.textContent = '✦ Legacy'; legacyBtn.style.display = 'none'; legacyBtn.addEventListener('click', openLegacy);
     crateBtn = document.createElement('button'); crateBtn.id = 'cratebtn'; crateBtn.textContent = '🎁'; crateBtn.style.display = 'none'; crateBtn.addEventListener('click', openCrate);
+    expBtn = document.createElement('button'); expBtn.id = 'expbtn'; expBtn.textContent = '⛵ Expeditions'; expBtn.addEventListener('click', toggleExp);
     advBtn = document.createElement('button'); advBtn.id = 'advbtn'; advBtn.textContent = 'Advance era'; advBtn.style.display = 'none'; advBtn.addEventListener('click', doAdvance);
     // top row: resource chips + mute + settings only (keeps it short so the era/goal bars stay clear)
     econHud.appendChild(muteBtn); econHud.appendChild(setBtn);
     wrap.appendChild(econHud);
     // bottom action bar: the primary buttons, thumb-reachable, so the top never overflows
     actionBar = document.createElement('div'); actionBar.id = 'actionbar';
-    actionBar.appendChild(advBtn); actionBar.appendChild(nBtn); actionBar.appendChild(legacyBtn); actionBar.appendChild(crateBtn); actionBar.appendChild(mBtn);
+    actionBar.appendChild(advBtn); actionBar.appendChild(nBtn); actionBar.appendChild(expBtn); actionBar.appendChild(legacyBtn); actionBar.appendChild(crateBtn); actionBar.appendChild(mBtn);
     wrap.appendChild(actionBar);
 
     // always-visible era progress bar (goal-gradient carrot)
@@ -1286,13 +1331,16 @@
 
     settingsPanel = document.createElement('div'); settingsPanel.id = 'settingspanel';
     wrap.appendChild(settingsPanel);
+
+    expPanel = document.createElement('div'); expPanel.id = 'exppanel';
+    wrap.appendChild(expPanel);
     updateHUD();
   }
 
-  var BUILD_TAG = 'v40';
+  var BUILD_TAG = 'v41';
   function toggleSettings() {
     settingsOpen = !settingsOpen;
-    if (settingsOpen && manageOpen) { manageOpen = false; managePanel.classList.remove('show'); }
+    if (settingsOpen) { if (manageOpen) { manageOpen = false; managePanel.classList.remove('show'); } if (expOpen) { expOpen = false; expPanel.classList.remove('show'); } }
     settingsPanel.classList.toggle('show', settingsOpen);
     resetArm = false;
     if (settingsOpen) { renderSettings(); sfx('tap'); haptic(8); }
@@ -1361,7 +1409,7 @@
     var on = simReady();
     econHud.classList.toggle('show', on); if (actionBar) actionBar.classList.toggle('show', on && !cine);
     if (eraBar) eraBar.classList.toggle('show', on && !cine);
-    if (!on) { if (managePanel) managePanel.classList.remove('show'); if (settingsPanel) { settingsPanel.classList.remove('show'); settingsOpen = false; } return; }
+    if (!on) { if (managePanel) managePanel.classList.remove('show'); if (settingsPanel) { settingsPanel.classList.remove('show'); settingsOpen = false; } if (expPanel) { expPanel.classList.remove('show'); expOpen = false; } return; }
     var s = SIM.state();
     hudFish.textContent = fmt(s.res.fish); hudPop.textContent = fmt(s.pop);
     if (hudFish.parentNode) hudFish.parentNode.classList.toggle('full', s.res.fish >= s.caps.fish * 0.98);  // storage-full nudge
@@ -1393,10 +1441,12 @@
     // reveal the Legacy button once prestige is relevant; pulse when a prestige is available
     if (legacyBtn) { var lp = s.prestige || { can: false }; var show = lp.can || legacyBal() > 0; legacyBtn.style.display = show ? '' : 'none'; legacyBtn.classList.toggle('ready', lp.can && !legacyOpen); }
     if (crateBtn) { var nc = crateCount(); crateBtn.style.display = nc > 0 ? '' : 'none'; crateBtn.setAttribute('data-n', nc); }
+    if (expBtn) { var rd = (s.voyages && s.voyages.ready) || 0; expBtn.classList.toggle('hasready', rd > 0); expBtn.setAttribute('data-n', rd); }
     if (legacyOpen) renderLegacy();
     if (manageOpen) renderManage();
+    if (expOpen) renderExp();
   }
-  function toggleManage() { manageOpen = !manageOpen; if (manageOpen && settingsOpen) { settingsOpen = false; settingsPanel.classList.remove('show'); } managePanel.classList.toggle('show', manageOpen); if (manageOpen) renderManage(); }
+  function toggleManage() { manageOpen = !manageOpen; if (manageOpen) { if (settingsOpen) { settingsOpen = false; settingsPanel.classList.remove('show'); } if (expOpen) { expOpen = false; expPanel.classList.remove('show'); } } managePanel.classList.toggle('show', manageOpen); if (manageOpen) renderManage(); }
   function renderManage() {
     if (!simReady()) { managePanel.classList.remove('show'); manageOpen = false; return; }
     var s = SIM.state(), BT = SIM.BT, html = '<div class="mp-head">Build & upgrade<button id="mp-close">✕</button></div>';
@@ -1639,7 +1689,11 @@
     startAmbient: function () { startAmbient(); }, ambient_audio: function () { return amb ? { state: amb.ctx.state, gain: +amb.master.gain.value.toFixed(3) } : null; },
     fireEvent: function (id) { var ev = SIM.fireEvent(id); if (ev) { updateHUD(); } return ev; },
     chooseEvent: function (i) { return onEventChoice(i); },
-    event: function () { return SIM.event(); }
+    event: function () { return SIM.event(); },
+    voyages: function () { return SIM.voyages(); },
+    startVoyage: function (id) { var r = SIM.startVoyage(id); if (r) { updateHUD(); if (expOpen) renderExp(); } return r; },
+    collectVoyage: function (seq) { return collectVoyageUI(seq); },
+    openExp: function () { if (!expOpen) toggleExp(); }
   };
 
   if (canvas && canvas.getContext) boot();

@@ -109,6 +109,7 @@
       network: { xp: 0, level: 1, routes: [] },
       hazard: { t: 0, next: hzRand(70, 150), phase: 'idle', strikeId: 0, last: null }, crash: null,
       evt: { t: 0, next: evRand(60, 130), active: null, lastId: '', seq: 0 },
+      voyages: [], voyageSeq: 0,
       stats: { storms: 0, shipped: 0 }
     };
   }
@@ -147,6 +148,7 @@
     }
     if (!S.hazard) S.hazard = { t: 0, next: hzRand(70, 150), phase: 'idle', strikeId: 0, last: null };
     if (!S.evt) S.evt = { t: 0, next: evRand(60, 130), active: null, lastId: '', seq: 0 };
+    if (!S.voyages) S.voyages = [];
     if (typeof S.crash === 'undefined') S.crash = null;
     if (!S.stats) S.stats = { storms: 0 };
     if (typeof S.stats.shipped !== 'number') S.stats.shipped = 0;
@@ -392,6 +394,54 @@
     save(); return out;
   }
 
+  // ---- expeditions: timed voyages that resolve on wall-clock time, so they finish while you're
+  // away (no tick needed — ready when now() >= endsAt). Send a ship, wait, collect a reward roll. ----
+  var DESTINATIONS = [
+    { id: 'cove', name: 'Smuggler’s Cove', tier: 1, secs: 120 },
+    { id: 'reef', name: 'Coral Reef', tier: 2, secs: 360 },
+    { id: 'isle', name: 'Lost Isle', tier: 3, secs: 900 },
+    { id: 'trench', name: 'The Deep Trench', tier: 4, secs: 2400 }
+  ];
+  function destDef(id) { for (var i = 0; i < DESTINATIONS.length; i++) if (DESTINATIONS[i].id === id) return DESTINATIONS[i]; return null; }
+  function voyageSlots() { return 1 + Math.min(2, Math.floor((S.era || 0) / 2)) + (META.voyageSlots || 0); }
+  function voyageCost(d) { return Math.round(120 * d.tier * (1 + (S.era || 0) * 0.5)); }
+  function canStartVoyage(id) { var d = destDef(id); return !!(d && S && S.money >= voyageCost(d) && (S.voyages || []).length < voyageSlots()); }
+  function startVoyage(id) {
+    var d = destDef(id); if (!canStartVoyage(id)) return false;
+    S.money -= voyageCost(d); S.voyages = S.voyages || [];
+    S.voyages.push({ id: d.id, startedAt: now(), endsAt: now() + d.secs * 1000, seq: (S.voyageSeq = (S.voyageSeq || 0) + 1) });
+    save(); return true;
+  }
+  function voyageReady(v) { return now() >= v.endsAt; }
+  function rollVoyage(d) {
+    var era = S.era || 0, cost = voyageCost(d), out = { cash: 0, res: null, crate: 0, relic: 0 };
+    out.cash = Math.round(cost * (2.2 + d.tier * 0.4) * (0.85 + Math.random() * 0.5));
+    if (Math.random() < 0.5) { var r = ['fish', 'timber', 'goods'][Math.floor(Math.random() * 3)]; out.res = {}; out.res[r] = Math.round(20 * d.tier * (1 + era * 0.4)); }
+    if (Math.random() < 0.12 * d.tier) out.crate = 1;
+    if (Math.random() < 0.05 * d.tier) out.relic = 1;                  // relics wired up in Phase 7c
+    return out;
+  }
+  function collectVoyage(seq) {
+    if (!S || !S.voyages) return null;
+    var idx = -1; for (var i = 0; i < S.voyages.length; i++) if (S.voyages[i].seq === seq) idx = i;
+    if (idx < 0) return null; var v = S.voyages[idx], d = destDef(v.id); if (!d || !voyageReady(v)) return null;
+    var out = rollVoyage(d); out.id = v.id; out.name = d.name; out.tier = d.tier;
+    S.money += out.cash; S.lifetimeMoney = (S.lifetimeMoney || 0) + out.cash;
+    if (out.res) { var p = S.ports[S.active]; if (p) for (var k in out.res) p.res[k] = (p.res[k] || 0) + out.res[k]; }
+    S.voyages.splice(idx, 1); save(); return out;
+  }
+  function voyageState() {
+    var active = (S.voyages || []).map(function (v) {
+      var d = destDef(v.id), rem = Math.max(0, Math.ceil((v.endsAt - now()) / 1000));
+      return { seq: v.seq, id: v.id, name: d ? d.name : v.id, tier: d ? d.tier : 1, total: d ? d.secs : 1, remaining: rem, ready: rem <= 0 };
+    });
+    return {
+      slots: voyageSlots(), used: active.length, ready: active.filter(function (a) { return a.ready; }).length,
+      active: active,
+      dests: DESTINATIONS.map(function (d) { return { id: d.id, name: d.name, tier: d.tier, secs: d.secs, cost: voyageCost(d), can: canStartVoyage(d.id) }; })
+    };
+  }
+
   // ---- repair / rebuild (the comeback money sink; salvage-discounted vs a fresh build) ----
   function repairCost(b) { var t = BT[b.type], miss = (100 - bhp(b)) / 100; return Math.max(1, Math.round(t.cost * 0.5 * miss * Math.pow(1.3, (b.level || 1) - 1))); }
   function canRepair(i) { var b = CUR && CUR.buildings[i]; return !!b && bhp(b) < 100 && S.money >= repairCost(b); }
@@ -523,6 +573,7 @@
       hazard: S.hazard ? { phase: S.hazard.phase || 'idle', port: S.hazard.port || null, kind: S.hazard.kind || null, in: Math.max(0, Math.ceil(S.hazard.warn || 0)), strikeId: S.hazard.strikeId || 0, last: S.hazard.last || null } : { phase: 'idle', strikeId: 0, last: null },
       crash: S.crash ? { res: S.crash.res, t: Math.ceil(S.crash.t) } : null,
       event: (S.evt && S.evt.active) ? { id: S.evt.active.id, name: S.evt.active.name, kind: S.evt.active.kind, seq: S.evt.active.seq, ttl: Math.max(0, Math.ceil(S.evt.active.ttl)), data: S.evt.active.data } : null,
+      voyages: voyageState(),
       stats: { storms: (S.stats && S.stats.storms) || 0, shipped: Math.floor((S.stats && S.stats.shipped) || 0), ports: Object.keys(S.ports).length },
       ports: portList()
     };
@@ -552,6 +603,7 @@
     repair: repair, canRepair: canRepair, repairCost: function (i) { return CUR && CUR.buildings[i] ? repairCost(CUR.buildings[i]) : 0; },
     strikePort: function (id) { if (S) { strike(id || S.active); save(); } },   // debug/test: force a storm strike now
     fireEvent: fireEvent, resolveEvent: resolveEvent, event: function () { return S && S.evt ? S.evt.active : null; },
+    startVoyage: startVoyage, collectVoyage: collectVoyage, canStartVoyage: canStartVoyage, voyages: voyageState,
     newGame: function () { S = fresh(); setActive('green'); save(); return snapshot(); },
     load: function () { load(); return snapshot(); },
     state: function (id) { return S ? snapshot(id) : null; },

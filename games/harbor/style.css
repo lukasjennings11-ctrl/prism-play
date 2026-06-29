@@ -281,13 +281,26 @@ html, body {
 #welcomemodal .wm-btn { width: 100%; padding: 13px; border: 0; border-radius: 13px; font-family: 'Lilita', cursive; font-weight: 400; font-size: 18px; letter-spacing: .02em; color: #20140a; background: linear-gradient(180deg, #ffd98a, var(--brass)); cursor: pointer; box-shadow: 0 6px 22px rgba(242,179,94,.35); }
 
 /* manage panel (compact bottom sheet) */
-#managepanel, #settingspanel {
+#managepanel, #settingspanel, #exppanel {
   position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(52px + env(safe-area-inset-bottom));
   display: none; flex-direction: column; gap: 4px; width: min(330px, calc(100% - 16px)); max-height: 44%;
   overflow-y: auto; z-index: 9; background: rgba(8,18,24,.93); border: 1px solid rgba(255,255,255,.16);
   border-radius: 12px; padding: 8px 10px; backdrop-filter: blur(8px);
 }
-#managepanel.show, #settingspanel.show { display: flex; }
+#managepanel.show, #settingspanel.show, #exppanel.show { display: flex; }
+.ex-slots { margin-left: auto; margin-right: 8px; font-family: 'Fredoka',sans-serif; font-size: 10px; font-weight: 800; color: var(--teal); }
+.mp-item.ex-go { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; align-items: center; background: rgba(124,224,214,.08); border-color: rgba(124,224,214,.24); }
+.mp-item.ex-go .mi-n { flex: 1; }
+.mp-item.ex-go.ready { background: rgba(255,210,74,.16); border-color: rgba(255,210,74,.5); }
+.mp-item.ex-go .mi-c { color: var(--teal); }
+.mp-item.ex-go.ready .mi-c { color: var(--brass); }
+.ex-bar { flex-basis: 100%; order: 3; height: 4px; border-radius: 999px; background: rgba(255,255,255,.1); overflow: hidden; margin-top: 3px; }
+.ex-bar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #2f8f7e, #7fe0d6); }
+.mp-item.ex-send { background: rgba(120,180,255,.08); }
+.mp-item.ex-send .mi-d { font-size: 9px; color: var(--muted); }
+.ex-note { font-family: 'Fredoka',sans-serif; font-size: 10px; color: var(--muted); margin-top: 4px; text-align: center; }
+#expbtn { position: relative; }
+#expbtn.hasready::after { content: attr(data-n); position: absolute; top: -5px; right: -5px; min-width: 16px; height: 16px; padding: 0 3px; border-radius: 999px; background: var(--brass); color: #20140a; font: 800 9px/16px 'Fredoka', sans-serif; }
 #settingspanel { max-height: 64%; }
 .set-help { font-family: 'Fredoka',system-ui,sans-serif; font-size: 10.5px; line-height: 1.55; color: var(--text); opacity: .92; background: rgba(255,255,255,.05); border-radius: 8px; padding: 6px 8px; }
 .set-help b { color: var(--brass); font-weight: 700; }
