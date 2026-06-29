@@ -392,6 +392,7 @@
     canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
     canvas.addEventListener('pointerdown', function (e) {
       if (window.Juice && !muted) Juice.Audio.unlock();           // unlock WebAudio on first gesture
+      if (!muted) startAmbient();                                 // start the harbour soundscape
       if (canvas.setPointerCapture) try { canvas.setPointerCapture(e.pointerId); } catch (x) {}
       ptrs.set(e.pointerId, pxy(e)); C.vAz = C.vEl = C.vTx = C.vTz = 0;
       if (ptrs.size === 1) { downPt = pxy(e); moved = false; multi = false; orbitMode = (e.button === 2 || e.shiftKey); var now = Date.now(); if (now - lastTap < 300) defaultView(); lastTap = now; }
@@ -451,9 +452,66 @@
   function applyMuted(v) {
     muted = !!v; if (window.Juice) Juice.Audio.setMuted(muted); if (window.Retention) Retention.set(GAME, 'muted', muted);
     if (muteBtn) { muteBtn.textContent = muted ? '♪̸' : '♪'; muteBtn.classList.toggle('off', muted); }
+    if (muted) stopAmbient(); else startAmbient();
     if (settingsOpen) renderSettings();
   }
   function applyHaptics(off) { hapticsOff = !!off; if (window.Retention) Retention.set(GAME, 'hapticsOff', hapticsOff); if (settingsOpen) renderSettings(); }
+
+  // Ambient harbour soundscape — a gentle synthesized wave bed with a slow swell
+  // plus occasional gull cries, on its own WebAudio graph. Subtle, respects the
+  // Sound toggle, pauses when the tab is hidden. No audio assets required.
+  var amb = null, ambGullT = null;
+  function startAmbient() {
+    if (muted) return;
+    if (!amb) {
+      try {
+        var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+        var ctx = new AC();
+        var master = ctx.createGain(); master.gain.value = 0; master.connect(ctx.destination);
+        var buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 2), ctx.sampleRate), d = buf.getChannelData(0), last = 0;
+        for (var i = 0; i < d.length; i++) { var w = Math.random() * 2 - 1; last = (last + 0.02 * w) / 1.02; d[i] = last * 3.2; }   // brown-ish noise
+        var src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
+        var lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 540; lp.Q.value = 0.4;
+        var wave = ctx.createGain(); wave.gain.value = 0.5;
+        src.connect(lp); lp.connect(wave); wave.connect(master);
+        var lfo = ctx.createOscillator(); lfo.frequency.value = 0.09; var lfoG = ctx.createGain(); lfoG.gain.value = 0.22;
+        lfo.connect(lfoG); lfoG.connect(wave.gain); lfo.start();                                   // slow tidal swell
+        src.start();
+        amb = { ctx: ctx, master: master };
+        scheduleGull();
+      } catch (e) { amb = null; return; }
+    }
+    if (amb.ctx.state === 'suspended') { try { amb.ctx.resume(); } catch (e) {} }
+    var t = amb.ctx.currentTime;
+    amb.master.gain.cancelScheduledValues(t); amb.master.gain.setValueAtTime(amb.master.gain.value, t);
+    amb.master.gain.linearRampToValueAtTime(0.16, t + 1.5);
+  }
+  function stopAmbient() {
+    if (!amb) return;
+    var t = amb.ctx.currentTime;
+    amb.master.gain.cancelScheduledValues(t); amb.master.gain.setValueAtTime(amb.master.gain.value, t);
+    amb.master.gain.linearRampToValueAtTime(0, t + 0.6);
+  }
+  function gullCry() {
+    if (!amb || muted) return;
+    var ctx = amb.ctx, t0 = ctx.currentTime;
+    for (var k = 0; k < 2; k++) {
+      var o = ctx.createOscillator(), g = ctx.createGain(), st = t0 + k * 0.17;
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(1250 + Math.random() * 320, st);
+      o.frequency.exponentialRampToValueAtTime(700, st + 0.15);
+      g.gain.setValueAtTime(0.0001, st); g.gain.linearRampToValueAtTime(0.05, st + 0.02); g.gain.exponentialRampToValueAtTime(0.0008, st + 0.2);
+      o.connect(g); g.connect(amb.master); o.start(st); o.stop(st + 0.24);
+    }
+  }
+  function scheduleGull() {
+    clearTimeout(ambGullT);
+    ambGullT = setTimeout(function () {
+      if (amb && !muted && !document.hidden && scene && scene.port) gullCry();
+      scheduleGull();
+    }, 7000 + Math.random() * 13000);
+  }
+  document.addEventListener('visibilitychange', function () { if (!amb) return; if (document.hidden) stopAmbient(); else if (!muted) startAmbient(); });
   function popWorld(wx, wy, wz, text, opts) { if (!FX) return; var s = worldToScreen(wx, wy, wz); if (s) FX.pop.add(s.x, s.y, text, opts); }
   function burstWorld(wx, wy, wz, opts) { if (!FX) return; var s = worldToScreen(wx, wy, wz); if (s) FX.p.burst(s.x, s.y, opts); }
   function shakeFX(m, d) { if (FX) FX.shake.add(m, d); }
@@ -1166,7 +1224,7 @@
     updateHUD();
   }
 
-  var BUILD_TAG = 'v37';
+  var BUILD_TAG = 'v38';
   function toggleSettings() {
     settingsOpen = !settingsOpen;
     if (settingsOpen && manageOpen) { manageOpen = false; managePanel.classList.remove('show'); }
@@ -1511,7 +1569,8 @@
     buyLegacy: function (id) { return buyLegacy(id); }, fmt: function (n) { return fmt(n); }, fxCount: function () { return FX ? FX.p.list.length : 0; },
     grantCrate: function (n) { grantCrate(n || 1); return crateCount(); }, crates: function () { return crateCount(); }, openCrate: function () { openCrate(); },
     rollCrate: function () { return rollCrate(); }, blueprints: function () { return ownedBlueprints().map(function (b) { return b.id; }); },
-    unlockAll: function () { HARBOR_BIOME_ORDER.forEach(function (id) { if (unlocked.indexOf(id) < 0) unlocked.push(id); }); saveUnlocked(); if (buildSelector._set) buildSelector._set(); }
+    unlockAll: function () { HARBOR_BIOME_ORDER.forEach(function (id) { if (unlocked.indexOf(id) < 0) unlocked.push(id); }); saveUnlocked(); if (buildSelector._set) buildSelector._set(); },
+    startAmbient: function () { startAmbient(); }, ambient_audio: function () { return amb ? { state: amb.ctx.state, gain: +amb.master.gain.value.toFixed(3) } : null; }
   };
 
   if (canvas && canvas.getContext) boot();
