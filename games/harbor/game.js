@@ -1024,11 +1024,13 @@
   function collectVoyageUI(seq) {
     var out = SIM.collectVoyage(seq); if (!out) return;
     if (out.crate) grantCrate(out.crate);
+    var rel = out.relic ? grantRandomRelic() : null;
     var pw = portWorld();
     if (pw) { popWorld(pw.x, pw.y + 7, pw.z, '+£' + fmt(out.cash), { color: '#ffe08a', size: 22, life: 1.4, vy: -56 }); burstWorld(pw.x, pw.y, pw.z, { count: 30, colors: ['#7fe0d6', '#ffe08a', '#fff3c4'], speed: 210, life: 1.1, size: 5 }); }
     var extra = out.res ? (' + ' + Object.keys(out.res).map(function (k) { return fmt(out.res[k]) + ' ' + k; }).join(', ')) : '';
     showHint('⛵ ' + out.name + ' returned! +£' + fmt(out.cash) + extra + (out.crate ? ' + a crate 🎁' : ''));
     sfx('win'); haptic(26); confettiBurst();
+    if (rel) announceRelic(rel);
     renderExp(); updateHUD();
   }
 
@@ -1058,8 +1060,38 @@
     var tr = legacyTreeMap(); tr[id] = (tr[id] || 0) + 1; Retention.set(GAME, 'legacyTree', tr);
     computeMeta(); return true;
   }
+  // ---- relics & collection sets (Phase 7c): permanent set-bonuses; stored in Retention so they
+  // survive prestige. Relics drop from expeditions, rare events, and Legendary crates. ----
+  var RELIC_SETS = [
+    { id: 'carto', name: 'Cartographer’s Cache', bonus: '+1 expedition ship', meta: 'voyageSlots', amt: 1, relics: ['Brass Astrolabe', 'Tattered Sea Chart', 'Star Compass'] },
+    { id: 'smug', name: 'Smuggler’s Hoard', bonus: '+25% faster voyages', meta: 'voyageSpeed', amt: 0.25, relics: ['Black Pearl', 'Forged Ledger', 'Hidden Cove Key'] },
+    { id: 'salt', name: 'Old Salt’s Charms', bonus: '+15% storm resistance', meta: 'hazardResist', amt: 0.15, relics: ['Whale-bone Talisman', 'Mermaid’s Tear', 'Storm Glass'] },
+    { id: 'prince', name: 'Merchant Prince’s Regalia', bonus: '+30% production', meta: 'prodMul', amt: 0.30, relics: ['Gilded Sextant', 'Ivory Abacus', 'Royal Seal'] }
+  ];
+  function ownedRelics() { return (window.Retention && Retention.get(GAME, 'relics', {})) || {}; }
+  function hasRelic(id) { return !!ownedRelics()[id]; }
+  function setById(id) { for (var i = 0; i < RELIC_SETS.length; i++) if (RELIC_SETS[i].id === id) return RELIC_SETS[i]; return null; }
+  function setComplete(set) { for (var i = 0; i < set.relics.length; i++) if (!hasRelic(set.id + i)) return false; return true; }
+  function relicCount() { var o = ownedRelics(), n = 0; for (var k in o) if (o[k]) n++; return n; }
+  function totalRelics() { var n = 0; RELIC_SETS.forEach(function (s) { n += s.relics.length; }); return n; }
+  function allRelicIds() { var a = []; RELIC_SETS.forEach(function (s) { s.relics.forEach(function (_, ri) { a.push(s.id + ri); }); }); return a; }
+  function unownedRelicIds() { var o = ownedRelics(); return allRelicIds().filter(function (id) { return !o[id]; }); }
+  function relicInfo(id) { var setId = id.replace(/[0-9]+$/, ''), ri = +id.slice(setId.length), s = setById(setId); return s ? { name: s.relics[ri], set: s.name, setId: setId } : null; }
+  function grantRelicById(id) {
+    if (!window.Retention || hasRelic(id)) return null;
+    var o = ownedRelics(); o[id] = true; Retention.set(GAME, 'relics', o); computeMeta();
+    var info = relicInfo(id); if (info) { var s = setById(info.setId); info.completed = s ? setComplete(s) : false; info.bonus = s ? s.bonus : ''; }
+    return info;
+  }
+  function grantRandomRelic() { var pool = unownedRelicIds(); if (!pool.length) return null; return grantRelicById(pool[Math.floor(Math.random() * pool.length)]); }
+  function announceRelic(rel) {
+    if (!rel) return;
+    if (rel.completed) { showHint('🏺 ' + rel.name + ' — ' + rel.set + ' COMPLETE! ' + rel.bonus); confettiBurst(); sfx('win'); haptic([10, 40, 20, 40]); }
+    else { showHint('🏺 Relic found: ' + rel.name + ' · ' + rel.set); sfx('score'); haptic(20); }
+  }
+
   function computeMeta() {
-    var tr = legacyTreeMap(), M = { prodMul: 1, sellMul: 1, costMul: 1, startMoney: 0, offlineHours: 8, hazardResist: 0, routeMul: 1 };
+    var tr = legacyTreeMap(), M = { prodMul: 1, sellMul: 1, costMul: 1, startMoney: 0, offlineHours: 8, hazardResist: 0, routeMul: 1, voyageSpeed: 1, voyageSlots: 0 };
     LEGACY_TREE.forEach(function (nd) {
       var amt = nd.per * (tr[nd.id] || 0);
       if (nd.meta === 'prodMul') M.prodMul = 1 + amt;
@@ -1076,6 +1108,14 @@
       if (bp.meta === 'prodMul') M.prodMul += bp.amt; else if (bp.meta === 'sellMul') M.sellMul += bp.amt;
       else if (bp.meta === 'routeMul') M.routeMul += bp.amt; else if (bp.meta === 'offlineHours') M.offlineHours += bp.amt;
       else if (bp.meta === 'hazardResist') M.hazardResist += bp.amt;
+    });
+    // completed relic sets stack permanent passives on top (Phase 7c)
+    RELIC_SETS.forEach(function (set) {
+      if (!setComplete(set)) return;
+      if (set.meta === 'prodMul') M.prodMul += set.amt;
+      else if (set.meta === 'hazardResist') M.hazardResist += set.amt;
+      else if (set.meta === 'voyageSpeed') M.voyageSpeed += set.amt;
+      else if (set.meta === 'voyageSlots') M.voyageSlots += set.amt;
     });
     if (SIM && SIM.applyMeta) SIM.applyMeta(M);
     return M;
@@ -1137,6 +1177,13 @@
     var owned = ownedBlueprints().length;
     html += '<div class="lg-sec">Blueprints (' + owned + '/' + BLUEPRINTS.length + ')</div>';
     BLUEPRINTS.forEach(function (bp) { var has = window.Progress && Progress.unlocked(GAME, bp.id); html += '<div class="lg-bp' + (has ? '' : ' locked') + '"><span class="bp-n">' + (has ? '📜 ' + bp.name : '🔒 ???') + '</span><span class="bp-d">' + (has ? bp.desc : 'Find in a Legendary crate') + '</span></div>'; });
+    html += '<div class="lg-sec">Relics (' + relicCount() + '/' + totalRelics() + ')</div>';
+    RELIC_SETS.forEach(function (set) {
+      var done = setComplete(set);
+      html += '<div class="lg-relset' + (done ? ' done' : '') + '"><div class="rs-head"><span class="rs-n">' + set.name + '</span><span class="rs-b">' + set.bonus + (done ? ' ✓' : '') + '</span></div><div class="rs-dots">';
+      set.relics.forEach(function (rn, ri) { var has = hasRelic(set.id + ri); html += '<span class="rs-dot' + (has ? ' on' : '') + '">' + (has ? '◆ ' + rn : '◇ ???') + '</span>'; });
+      html += '</div></div>';
+    });
     var got = 0; ACHIEVEMENTS.forEach(function (a) { if (achOwned(a.id)) got++; });
     html += '<div class="lg-sec">Achievements (' + got + '/' + ACHIEVEMENTS.length + ')</div><div class="lg-achgrid">';
     ACHIEVEMENTS.forEach(function (a) { var has = achOwned(a.id); html += '<div class="lg-ach' + (has ? '' : ' locked') + '">' + (has ? '🏆' : '🔒') + '<span>' + (has ? a.name : '???') + '</span></div>'; });
@@ -1250,7 +1297,7 @@
     } else {                                                           // legendary — a blueprint (or jackpot Legacy)
       tier = 'Legendary'; color = '#ff9a5a'; var pool = unownedBlueprints();
       if (pool.length) { var bp = pool[Math.floor(Math.random() * pool.length)]; if (window.Progress) Progress.unlock(GAME, bp.id); computeMeta(); title = bp.name; sub = bp.desc; }
-      else { var jp = 15 + Math.floor(Math.random() * 25); setLegacyBal(legacyBal() + jp); title = '+' + jp + ' ✦ Legacy'; sub = 'Jackpot!'; }
+      else { var rel = grantRandomRelic(); if (rel) { title = '🏺 ' + rel.name; sub = rel.set + (rel.completed ? ' — set complete!' : ''); } else { var jp = 15 + Math.floor(Math.random() * 25); setLegacyBal(legacyBal() + jp); title = '+' + jp + ' ✦ Legacy'; sub = 'Jackpot!'; } }
     }
     return { tier: tier, color: color, title: title, sub: sub };
   }
@@ -1337,7 +1384,7 @@
     updateHUD();
   }
 
-  var BUILD_TAG = 'v41';
+  var BUILD_TAG = 'v42';
   function toggleSettings() {
     settingsOpen = !settingsOpen;
     if (settingsOpen) { if (manageOpen) { manageOpen = false; managePanel.classList.remove('show'); } if (expOpen) { expOpen = false; expPanel.classList.remove('show'); } }
@@ -1693,7 +1740,9 @@
     voyages: function () { return SIM.voyages(); },
     startVoyage: function (id) { var r = SIM.startVoyage(id); if (r) { updateHUD(); if (expOpen) renderExp(); } return r; },
     collectVoyage: function (seq) { return collectVoyageUI(seq); },
-    openExp: function () { if (!expOpen) toggleExp(); }
+    openExp: function () { if (!expOpen) toggleExp(); },
+    relics: function () { return { count: relicCount(), total: totalRelics(), owned: ownedRelics(), meta: SIM.meta() }; },
+    grantRelic: function (id) { var r = id ? grantRelicById(id) : grantRandomRelic(); if (r) { announceRelic(r); updateHUD(); } return r; }
   };
 
   if (canvas && canvas.getContext) boot();

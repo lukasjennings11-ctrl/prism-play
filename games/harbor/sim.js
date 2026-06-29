@@ -77,7 +77,7 @@
 
   // META: permanent cross-prestige multipliers (computed in game.js from the Legacy tree, fed in via
   // applyMeta so the sim stays headless-testable). Defaults are the no-prestige baseline.
-  var META = { prodMul: 1, sellMul: 1, costMul: 1, startMoney: 0, offlineHours: 8, hazardResist: 0, routeMul: 1 };
+  var META = { prodMul: 1, sellMul: 1, costMul: 1, startMoney: 0, offlineHours: 8, hazardResist: 0, routeMul: 1, voyageSpeed: 1, voyageSlots: 0 };
   function applyMeta(m) { if (!m) return; for (var k in META) if (typeof m[k] === 'number') META[k] = m[k]; }
 
   // TIDE: today's daily market modifier (computed in game.js from the seeded daily RNG, fed in here).
@@ -409,7 +409,7 @@
   function startVoyage(id) {
     var d = destDef(id); if (!canStartVoyage(id)) return false;
     S.money -= voyageCost(d); S.voyages = S.voyages || [];
-    S.voyages.push({ id: d.id, startedAt: now(), endsAt: now() + d.secs * 1000, seq: (S.voyageSeq = (S.voyageSeq || 0) + 1) });
+    S.voyages.push({ id: d.id, startedAt: now(), endsAt: now() + d.secs * 1000 / (META.voyageSpeed || 1), seq: (S.voyageSeq = (S.voyageSeq || 0) + 1) });
     save(); return true;
   }
   function voyageReady(v) { return now() >= v.endsAt; }

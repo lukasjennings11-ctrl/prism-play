@@ -228,6 +228,14 @@ html, body {
 #legacypanel .lg-bp .bp-d { font-size: 10px; color: #d6b39a; }
 #legacypanel .lg-bp.locked { background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.1); }
 #legacypanel .lg-bp.locked .bp-n { color: #6f6a85; } #legacypanel .lg-bp.locked .bp-d { color: #5a5570; }
+#legacypanel .lg-relset { padding: 7px 12px; border-radius: 10px; background: rgba(124,224,214,.07); border: 1px solid rgba(124,224,214,.2); font-family: 'Fredoka', sans-serif; }
+#legacypanel .lg-relset.done { background: rgba(124,224,214,.15); border-color: rgba(124,224,214,.55); }
+#legacypanel .rs-head { display: flex; align-items: baseline; gap: 8px; }
+#legacypanel .rs-n { flex: 1; font-size: 12px; font-weight: 700; color: var(--text); }
+#legacypanel .rs-b { font-size: 10px; font-weight: 800; color: var(--teal); }
+#legacypanel .rs-dots { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 4px; }
+#legacypanel .rs-dot { font-size: 10px; color: #5a6a72; }
+#legacypanel .rs-dot.on { color: #bdeee6; font-weight: 700; }
 /* almanac: stat cells + achievement grid */
 #legacypanel .lg-statgrid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
 #legacypanel .lg-stat { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 9px 4px; border-radius: 10px; background: rgba(184,132,240,.07); border: 1px solid rgba(184,132,240,.16); }
