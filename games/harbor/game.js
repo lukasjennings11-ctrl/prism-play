@@ -974,6 +974,7 @@
       sfx('win'); haptic(24); if (out.win) confettiBurst();
     } else if (out.cash < 0) { sfx('lose'); haptic(16); }
     else sfx('tap');
+    if (out.cash > 0) seasonAdd(12);
     if (out.text) showHint(out.text);
     updateHUD();
   }
@@ -1032,6 +1033,7 @@
     showHint('⛵ ' + out.name + ' returned! +£' + fmt(out.cash) + extra + (out.crate ? ' + a crate 🎁' : ''));
     sfx('win'); haptic(26); confettiBurst();
     if (rel) announceRelic(rel);
+    seasonAdd(8 * (out.tier || 1));
     renderExp(); updateHUD();
   }
 
@@ -1082,7 +1084,7 @@
       r.wins = (r.wins || 0) + 1; rivalSet(r);
       var prize = Math.round(Math.max(1000, (SIM.state().lifetimeMoney || 0) * 0.03));
       if (SIM.raw()) { SIM.raw().money += prize; SIM.raw().lifetimeMoney = (SIM.raw().lifetimeMoney || 0) + prize; }
-      var rel = grantRandomRelic(); showRivalResult(true, prize, rel);
+      var rel = grantRandomRelic(); seasonAdd(40); showRivalResult(true, prize, rel);
     } else { r.losses = (r.losses || 0) + 1; rivalSet(r); showRivalResult(false, 0, null); }
     updateHUD();
   }
@@ -1151,7 +1153,7 @@
     if (SIM.raw()) { SIM.raw().money += gain; SIM.raw().lifetimeMoney = (SIM.raw().lifetimeMoney || 0) + gain; }
     var r = c.getBoundingClientRect();
     if (FX) { FX.pop.add(r.left + r.width / 2, r.top, '+£' + fmt(gain), { color: c.dataset.gem ? '#bfe9ff' : '#ffe08a', size: 16, life: 1.0, vy: -50 }); FX.p.burst(r.left + r.width / 2, r.top + r.height / 2, { count: 8, colors: ['#ffe08a', '#fff3c4'], speed: 140, life: 0.7, size: 4 }); }
-    sfx('score'); haptic(7);
+    sfx('score'); haptic(7); seasonAdd(1);
     if (c.parentNode) c.parentNode.removeChild(c);
     updateComboUI();
   }
@@ -1165,6 +1167,42 @@
     comboT -= 0.1; if (comboT <= 0) combo = 0;
     updateComboUI();
     feverLoopT = setTimeout(feverTick, 100);
+  }
+
+  // ---- seasons & the free Harbour Pass (Phase 7f): a rotating themed season; earn season points
+  // from everything you do and claim a free milestone reward track. Ethical: no paid tier, no
+  // punishing expiry — rewards are applied the moment you claim them and are yours forever. ----
+  var SEASON_EPOCH = Date.UTC(2026, 0, 1), SEASON_LEN = 14 * 24 * 3600 * 1000;
+  var SEASON_THEMES = ['Tides of Fortune', 'Monsoon Trade Winds', 'The Gold Run', 'Harvest of the Sea', 'Lanterns & Lighthouses', 'Stormwatch Season', 'The Great Regatta', 'Frostwater Passage'];
+  var PASS_TIERS = [
+    { at: 60, reward: { crate: 1 }, label: 'Salvage crate' },
+    { at: 150, reward: { legacy: 3 }, label: '+3 ✦ Legacy' },
+    { at: 320, reward: { crate: 2 }, label: '2 crates' },
+    { at: 560, reward: { relic: 1 }, label: 'A relic' },
+    { at: 880, reward: { legacy: 8 }, label: '+8 ✦ Legacy' },
+    { at: 1300, reward: { crate: 3 }, label: '3 crates' },
+    { at: 1850, reward: { relic: 1 }, label: 'A relic' },
+    { at: 2600, reward: { legacy: 20 }, label: '+20 ✦ Legacy' },
+    { at: 3600, reward: { crate: 5 }, label: '5 crates' },
+    { at: 5000, reward: { relic: 1, legacy: 30 }, label: 'Relic + 30 ✦ Legacy' }
+  ];
+  function seasonId() { return Math.floor((Date.now() - SEASON_EPOCH) / SEASON_LEN); }
+  function seasonTheme() { var i = seasonId() % SEASON_THEMES.length; return SEASON_THEMES[(i + SEASON_THEMES.length) % SEASON_THEMES.length]; }
+  function seasonGet() { var s = window.Retention && Retention.get(GAME, 'season', null), id = seasonId(); if (!s || s.id !== id) { s = { id: id, points: 0, claimed: [] }; if (window.Retention) Retention.set(GAME, 'season', s); } return s; }
+  function seasonSet(s) { if (window.Retention) Retention.set(GAME, 'season', s); }
+  function seasonAdd(n) { if (!n) return; var s = seasonGet(); s.points = (s.points || 0) + n; seasonSet(s); }
+  function seasonDaysLeft() { return Math.max(1, Math.ceil((SEASON_EPOCH + (seasonId() + 1) * SEASON_LEN - Date.now()) / (24 * 3600 * 1000))); }
+  function passClaimable(i) { var s = seasonGet(); return (s.points || 0) >= PASS_TIERS[i].at && s.claimed.indexOf(i) < 0; }
+  function claimPass(i) {
+    if (!passClaimable(i)) return false;
+    var rw = PASS_TIERS[i].reward, s = seasonGet(); s.claimed.push(i); seasonSet(s);
+    if (rw.crate) grantCrate(rw.crate);
+    if (rw.legacy) setLegacyBal(legacyBal() + rw.legacy);
+    if (rw.relic) { var rel = grantRandomRelic(); if (rel) announceRelic(rel); }
+    sfx('win'); haptic(26); confettiBurst();
+    showHint('🎟️ Harbour Pass: ' + PASS_TIERS[i].label + ' claimed!');
+    computeMeta(); updateHUD();
+    return true;
   }
 
   // ---- Legacy / Prestige: meta progression persisted across runs (via Retention, survives a wipe) ----
@@ -1293,7 +1331,19 @@
     pres.innerHTML = '<div class="lg-pdesc">Cash your empire\'s lifetime earnings into <b>Legacy</b> — a permanent multiplier on every future run.</div>' +
       '<button class="lg-pbtn" id="lg-pbtn"' + (p.can ? '' : ' disabled') + '>' + (p.can ? 'Sign a New Charter  ·  +' + fmt(p.gain) + ' ✦' : 'Reach £' + fmt(p.threshold || 250000) + ' lifetime to prestige') + '</button>' +
       '<div class="lg-stats">Charters signed: ' + pc + (best > 0 ? '  ·  Best empire: £' + fmt(best) : '') + '</div>';
-    var tree = legacyPanel.querySelector('#lg-tree'), html = '<div class="lg-sec">Permanent upgrades</div>';
+    var tree = legacyPanel.querySelector('#lg-tree'), html = '';
+    // Harbour Pass — the free seasonal reward track
+    var ss = seasonGet(), maxAt = PASS_TIERS[PASS_TIERS.length - 1].at;
+    html += '<div class="lg-sec">🎟️ Harbour Pass · ' + seasonTheme() + ' · ' + seasonDaysLeft() + 'd left</div>';
+    html += '<div class="lg-passbar"><i style="width:' + Math.min(100, Math.round((ss.points / maxAt) * 100)) + '%"></i></div>';
+    html += '<div class="lg-passpts">' + fmt(ss.points) + ' season points</div>';
+    html += '<div class="lg-pass">';
+    PASS_TIERS.forEach(function (t, ti) {
+      var claimed = ss.claimed.indexOf(ti) >= 0, can = passClaimable(ti);
+      html += '<div class="pass-tier' + (claimed ? ' done' : '') + (can ? ' can' : '') + '"' + (can ? ' data-pass="' + ti + '"' : '') + '><span class="pt-at">' + fmt(t.at) + '</span><span class="pt-l">' + t.label + '</span><span class="pt-s">' + (claimed ? '✓' : can ? 'CLAIM' : '') + '</span></div>';
+    });
+    html += '</div>';
+    html += '<div class="lg-sec">Permanent upgrades</div>';
     LEGACY_TREE.forEach(function (nd) {
       var lv = legacyLvl(nd.id), maxed = lv >= nd.max, can = canBuyLegacy(nd);
       html += '<button class="lg-node" data-leg="' + nd.id + '"' + ((can && !maxed) ? '' : ' disabled') + '>' +
@@ -1324,6 +1374,7 @@
     tree.innerHTML = html;
     pres.querySelector('#lg-pbtn').addEventListener('click', function () { doPrestige(); renderLegacy(); });
     tree.querySelectorAll('[data-leg]').forEach(function (el) { el.addEventListener('click', function () { if (buyLegacy(el.getAttribute('data-leg'))) { sfx('merge'); haptic(16); renderLegacy(); updateHUD(); } else sfx('lose'); }); });
+    tree.querySelectorAll('[data-pass]').forEach(function (el) { el.addEventListener('click', function () { if (claimPass(+el.getAttribute('data-pass'))) renderLegacy(); }); });
   }
 
   // ---- Daily cadence: rotating market tide, daily missions, login streak (reuses Progress/Retention) ----
@@ -1521,7 +1572,7 @@
     updateHUD();
   }
 
-  var BUILD_TAG = 'v44';
+  var BUILD_TAG = 'v45';
   function toggleSettings() {
     settingsOpen = !settingsOpen;
     if (settingsOpen) { if (manageOpen) { manageOpen = false; managePanel.classList.remove('show'); } if (expOpen) { expOpen = false; expPanel.classList.remove('show'); } }
@@ -1720,7 +1771,7 @@
     managePanel.querySelectorAll('[data-mgr]').forEach(function (el) { el.addEventListener('click', function () { var k = el.getAttribute('data-mgr'); if (SIM.buyManager(k)) { plopFeedback(2, 'Hired!'); sfx('merge'); haptic(20); bumpDaily('manager'); updateHUD(); renderManage(); } else sfx('lose'); }); });
     managePanel.querySelectorAll('[data-repair]').forEach(function (el) { el.addEventListener('click', function () { var i = +el.getAttribute('data-repair'); if (SIM.repair(i)) { plopFeedback(2, 'Repaired'); sfx('merge'); haptic(16); updateHUD(); renderManage(); } else sfx('lose'); }); });
     managePanel.querySelectorAll('[data-auto]').forEach(function (el) { el.addEventListener('click', function () { var k = el.getAttribute('data-auto'); setAuto(k, !autoOn(k)); sfx('tap'); haptic(10); renderManage(); }); });
-    managePanel.querySelectorAll('[data-order]').forEach(function (el) { el.addEventListener('click', function () { var id = el.getAttribute('data-order'); var paid = SIM.fulfillContract(id); if (paid > 0) { statFlags.orders++; bumpDaily('order'); var pw = portWorld(); if (pw) { popWorld(pw.x, pw.y + 7, pw.z, '+£' + fmt(paid), { color: '#ffe08a', size: 22, life: 1.4, vy: -56 }); burstWorld(pw.x, pw.y, pw.z, { count: 30, colors: ['#ffe08a', '#fff3c4', '#ffd24a'], speed: 200, life: 1.0, size: 5 }); } shakeFX(5, 0.3); sfx('win'); haptic(30); confettiBurst(); updateHUD(); renderManage(); } else sfx('lose'); }); });
+    managePanel.querySelectorAll('[data-order]').forEach(function (el) { el.addEventListener('click', function () { var id = el.getAttribute('data-order'); var paid = SIM.fulfillContract(id); if (paid > 0) { statFlags.orders++; bumpDaily('order'); seasonAdd(15); var pw = portWorld(); if (pw) { popWorld(pw.x, pw.y + 7, pw.z, '+£' + fmt(paid), { color: '#ffe08a', size: 22, life: 1.4, vy: -56 }); burstWorld(pw.x, pw.y, pw.z, { count: 30, colors: ['#ffe08a', '#fff3c4', '#ffd24a'], speed: 200, life: 1.0, size: 5 }); } shakeFX(5, 0.3); sfx('win'); haptic(30); confettiBurst(); updateHUD(); renderManage(); } else sfx('lose'); }); });
   }
   // build/upgrade "plop": shake + dust burst + ascending pitch + haptic + popup at the port
   function plopFeedback(tier, label) {
@@ -1775,6 +1826,7 @@
     for (var bk in SIM.BT) if (SIM.BT[bk].era === toEra) newBuilds.push(SIM.BT[bk].name);
     var unlockTxt = newBuilds.concat(newWorlds).slice(0, 4).join(' · ');
     grantCrate(1);                                                  // every era-up drops a salvage crate
+    seasonAdd(30);                                                  // era-ups award season points
     if (window.Juice) Juice.Audio.unlock();
     startAscension(toEra, name, unlockTxt, bonus);                  // cinematic does buildBiome + bonus at the bloom
   }
@@ -1885,7 +1937,8 @@
     rival: function () { return rivalGet(); },
     triggerRival: function () { rivalPending = false; var r = rivalGet(); r.race = null; rivalSet(r); showRivalChallenge(); },
     raceProgress: function () { var r = rivalGet(); return r.race ? { kind: r.race.kind, prog: raceCounter(r.race.kind) - r.race.base, target: r.race.target } : null; },
-    startFever: function (secs) { startFever(secs); }, fever: function () { return { active: feverActive(), combo: combo, mult: +comboMult().toFixed(2), coins: feverLayer ? feverLayer.querySelectorAll('.coin').length : 0 }; }, collectCoins: function () { if (feverLayer) feverLayer.querySelectorAll('.coin').forEach(function (c) { collectCoin(c); }); }
+    startFever: function (secs) { startFever(secs); }, fever: function () { return { active: feverActive(), combo: combo, mult: +comboMult().toFixed(2), coins: feverLayer ? feverLayer.querySelectorAll('.coin').length : 0 }; }, collectCoins: function () { if (feverLayer) feverLayer.querySelectorAll('.coin').forEach(function (c) { collectCoin(c); }); },
+    season: function () { return { id: seasonId(), theme: seasonTheme(), points: seasonGet().points, claimed: seasonGet().claimed.slice(), daysLeft: seasonDaysLeft(), tiers: PASS_TIERS.length }; }, addSeasonPoints: function (n) { seasonAdd(n); updateHUD(); }, claimPass: function (i) { return claimPass(i); }
   };
 
   if (canvas && canvas.getContext) boot();

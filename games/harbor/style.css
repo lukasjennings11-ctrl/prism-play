@@ -236,6 +236,18 @@ html, body {
 #legacypanel .rs-dots { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 4px; }
 #legacypanel .rs-dot { font-size: 10px; color: #5a6a72; }
 #legacypanel .rs-dot.on { color: #bdeee6; font-weight: 700; }
+#legacypanel .lg-passbar { height: 6px; border-radius: 999px; background: rgba(255,255,255,.12); overflow: hidden; }
+#legacypanel .lg-passbar i { display: block; height: 100%; background: linear-gradient(90deg, #2f8f7e, #ffd24a); }
+#legacypanel .lg-passpts { font-family: 'Fredoka', sans-serif; font-size: 10px; font-weight: 700; color: var(--brass); margin: 2px 0; }
+#legacypanel .lg-pass { display: flex; flex-direction: column; gap: 3px; }
+#legacypanel .pass-tier { display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-radius: 8px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); font-family: 'Fredoka', sans-serif; opacity: .6; }
+#legacypanel .pass-tier .pt-at { font-size: 10px; font-weight: 800; color: var(--muted); min-width: 38px; }
+#legacypanel .pass-tier .pt-l { flex: 1; font-size: 11px; font-weight: 700; color: var(--text); }
+#legacypanel .pass-tier .pt-s { font-size: 10px; font-weight: 800; color: var(--muted); }
+#legacypanel .pass-tier.done { opacity: 1; background: rgba(124,224,214,.1); border-color: rgba(124,224,214,.3); }
+#legacypanel .pass-tier.done .pt-s { color: var(--teal); }
+#legacypanel .pass-tier.can { opacity: 1; cursor: pointer; background: rgba(255,210,74,.16); border-color: rgba(255,210,74,.55); animation: armpulse .8s ease-in-out infinite alternate; }
+#legacypanel .pass-tier.can .pt-s { color: var(--brass); }
 /* almanac: stat cells + achievement grid */
 #legacypanel .lg-statgrid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
 #legacypanel .lg-stat { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 9px 4px; border-radius: 10px; background: rgba(184,132,240,.07); border: 1px solid rgba(184,132,240,.16); }
