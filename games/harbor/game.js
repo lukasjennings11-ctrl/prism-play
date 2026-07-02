@@ -1612,7 +1612,7 @@
     updateHUD();
   }
 
-  var BUILD_TAG = 'v46';
+  var BUILD_TAG = 'v47';
   function toggleSettings() {
     settingsOpen = !settingsOpen;
     if (settingsOpen) { if (manageOpen) { manageOpen = false; managePanel.classList.remove('show'); } if (expOpen) { expOpen = false; expPanel.classList.remove('show'); } }
