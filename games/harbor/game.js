@@ -257,6 +257,94 @@
     }
   }
 
+  // ---- Phase 9b: the living world — the meta systems made visible on the water ----
+  // Expedition ships sail OUT for the first half of a voyage and BACK for the second, so a
+  // ready-to-collect ship waits just off the harbour. Trade-route freighters shuttle between
+  // the active port and the horizon on stable per-route headings (capped at 4). While a rival
+  // race is on, Baron Krall's black-sailed ship patrols offshore. State is cached from the sim
+  // ~1/sec (keyed per voyage seq / route id); the per-frame draw allocates nothing.
+  var fleet = { exp: [], routes: [], rival: null, at: -1e9 };
+  var FLEET_SAIL = [[0.78, 0.9, 1.0], [0.55, 0.95, 0.72], [1.0, 0.82, 0.34], [0.85, 0.5, 1.0]];       // sail tint per destination tier 1..4
+  var FLEET_HULL = { fish: [0.56, 0.66, 0.78], timber: [0.5, 0.33, 0.18], goods: [0.9, 0.52, 0.2] };  // hull tint per route resource
+  var EXP_HULL = [0.38, 0.26, 0.17], EXP_CABIN = [0.3, 0.21, 0.14], RTE_SAIL = [0.93, 0.91, 0.87],
+      RVL_HULL = [0.15, 0.13, 0.18], RVL_CABIN = [0.1, 0.09, 0.13], RVL_SAIL = [0.06, 0.05, 0.08];
+  function refreshFleet() {
+    fleet.at = clock; fleet.exp.length = 0; fleet.routes.length = 0; fleet.rival = null;
+    var p = scene.port; if (!p || !simReady()) return;
+    // offshore heading: reuse the deep-water lane the ambient boats found (fallback: downhill to the sea)
+    var ox, oz;
+    if (ambient && (ambient.cx !== p.x || ambient.cz !== p.z)) { var ol = Math.hypot(ambient.cx - p.x, ambient.cz - p.z) || 1; ox = (ambient.cx - p.x) / ol; oz = (ambient.cz - p.z) / ol; }
+    else { var a0 = seaAz(p.x, p.z); ox = Math.sin(a0); oz = Math.cos(a0); }
+    var i, k, ca, sa, dx, dz;
+    var v = SIM.voyages();
+    for (i = 0; i < v.active.length; i++) {
+      var a = v.active[i], off = (((a.seq * 0.618034) % 1) - 0.5) * 1.1;   // stable fan-out per voyage
+      ca = Math.cos(off); sa = Math.sin(off); dx = ox * ca + oz * sa; dz = oz * ca - ox * sa;
+      fleet.exp.push({
+        prog: a.ready ? 1 : clamp(1 - a.remaining / Math.max(1, a.total), 0, 1),
+        dx: dx, dz: dz, yawOut: Math.atan2(dx, dz), ph: a.seq * 2.4,
+        sail: FLEET_SAIL[clamp((a.tier || 1) - 1, 0, 3)]
+      });
+    }
+    var net = SIM.network();
+    for (i = 0, k = 0; i < net.routes.length && k < 4; i++) {
+      var rt = net.routes[i]; if (rt.a !== biomeId && rt.b !== biomeId) continue;
+      var h = hash('rt:' + rt.id), roff = ((h % 1000) / 1000 - 0.5) * 1.7;   // stable heading per route id
+      ca = Math.cos(roff); sa = Math.sin(roff); dx = ox * ca + oz * sa; dz = oz * ca - ox * sa;
+      var hull = FLEET_HULL[rt.res] || FLEET_HULL.goods;
+      fleet.routes.push({ dx: dx, dz: dz, yawOut: Math.atan2(dx, dz), sp: 0.09 + (h % 7) * 0.008, ph: (h % 200) / 100, hull: hull, cargo: [hull[0] * 0.8, hull[1] * 0.8, hull[2] * 0.8] });
+      k++;
+    }
+    var rr = rivalGet();
+    if (rr && rr.race) fleet.rival = { cx: p.x + ox * 96, cz: p.z + oz * 96, px: oz, pz: -ox };   // patrol line runs along the coast
+  }
+  // draw the meta fleet; assumes the same flat-colour program state as drawAmbient
+  function drawFleet(M) {
+    var p = scene.port; if (!p) return;
+    if (clock - fleet.at > 1) refreshFleet();
+    var i, x, z, yaw, bob, e, r;
+    for (i = 0; i < fleet.exp.length; i++) {                       // expedition ships (1.3x, tier-tinted sail)
+      e = fleet.exp[i];
+      var f = e.prog < 0.5 ? e.prog * 2 : (1 - e.prog) * 2;        // out for the first half, home for the second
+      var d = 28 + f * 132;                                        // ready ships wait just off the harbour
+      x = p.x + e.dx * d; z = p.z + e.dz * d;
+      yaw = e.prog < 0.5 ? e.yawOut : e.yawOut + Math.PI;
+      bob = Math.sin(clock * 1.3 + e.ph) * 0.3;
+      gl.uniform3fv(M.u.uBase, EXP_HULL);
+      composeRYS(mModel, x, 0.55 + bob, z, 4.68, 1.0, 1.95, yaw); gl.uniformMatrix4fv(M.u.uModel, false, mModel); drawMesh(M, hullMesh);
+      gl.uniform3fv(M.u.uBase, EXP_CABIN);
+      composeRYS(mModel, x, 1.2 + bob, z, 1.95, 1.0, 1.56, yaw); gl.uniformMatrix4fv(M.u.uModel, false, mModel); drawMesh(M, hullMesh);
+      gl.uniform3fv(M.u.uBase, e.sail);
+      composeRYS(mModel, x, 1.4 + bob, z, 2.86, 5.98, 0.5, yaw); gl.uniformMatrix4fv(M.u.uModel, false, mModel); drawMesh(M, sailMesh);
+    }
+    for (i = 0; i < fleet.routes.length; i++) {                    // trade-route freighters (resource-tinted hull + deck cargo)
+      r = fleet.routes[i];
+      var ph = (clock * r.sp + r.ph) % 2, ff = ph < 1 ? ph : 2 - ph;
+      var dd = 24 + ff * 92;
+      x = p.x + r.dx * dd; z = p.z + r.dz * dd;
+      yaw = ph < 1 ? r.yawOut : r.yawOut + Math.PI;
+      bob = Math.sin(clock * 1.3 + r.ph * 3) * 0.3;
+      gl.uniform3fv(M.u.uBase, r.hull);
+      composeRYS(mModel, x, 0.55 + bob, z, 3.6, 1.0, 1.5, yaw); gl.uniformMatrix4fv(M.u.uModel, false, mModel); drawMesh(M, hullMesh);
+      gl.uniform3fv(M.u.uBase, r.cargo);
+      composeRYS(mModel, x, 1.35 + bob, z, 1.7, 0.9, 1.1, yaw); gl.uniformMatrix4fv(M.u.uModel, false, mModel); drawMesh(M, boxMesh);
+      gl.uniform3fv(M.u.uBase, RTE_SAIL);
+      composeRYS(mModel, x, 1.4 + bob, z, 1.9, 3.7, 0.5, yaw); gl.uniformMatrix4fv(M.u.uModel, false, mModel); drawMesh(M, sailMesh);
+    }
+    if (fleet.rival) {                                             // Baron Krall patrols while the race is on
+      var rv = fleet.rival, pa = clock * 0.35, dir = Math.cos(pa) >= 0 ? 1 : -1;
+      x = rv.cx + rv.px * Math.sin(pa) * 46; z = rv.cz + rv.pz * Math.sin(pa) * 46;
+      yaw = Math.atan2(rv.px * dir, rv.pz * dir);
+      bob = Math.sin(clock * 1.3) * 0.3;
+      gl.uniform3fv(M.u.uBase, RVL_HULL);
+      composeRYS(mModel, x, 0.55 + bob, z, 5.76, 1.1, 2.4, yaw); gl.uniformMatrix4fv(M.u.uModel, false, mModel); drawMesh(M, hullMesh);
+      gl.uniform3fv(M.u.uBase, RVL_CABIN);
+      composeRYS(mModel, x, 1.3 + bob, z, 2.4, 1.1, 1.9, yaw); gl.uniformMatrix4fv(M.u.uModel, false, mModel); drawMesh(M, hullMesh);
+      gl.uniform3fv(M.u.uBase, RVL_SAIL);
+      composeRYS(mModel, x, 1.5 + bob, z, 3.5, 7.4, 0.5, yaw); gl.uniformMatrix4fv(M.u.uModel, false, mModel); drawMesh(M, sailMesh);
+    }
+  }
+
   function render() {
     if (!gl) return;
     if (scene.port && !ambient) buildAmbient();
@@ -304,7 +392,7 @@
       gl.uniform3fv(M.u.uBase, parts[i].c); composeRYS(mModel, wx, wy, wz, parts[i].s[0], parts[i].s[1], parts[i].s[2], pf ? pf.yaw : 0); gl.uniformMatrix4fv(M.u.uModel, false, mModel); drawMesh(M, boxMesh);
     }
     // living port: sailing boats + wheeling gulls (flat-colour, same program state as crane parts)
-    if (scene.port) drawAmbient(M);
+    if (scene.port) { drawAmbient(M); drawFleet(M); }
 
     // curated harbour beacons (highlight each candidate; the selected one taller, brighter, pulsing)
     if (foundMode() && sites.length) {
@@ -1612,7 +1700,7 @@
     updateHUD();
   }
 
-  var BUILD_TAG = 'v48';
+  var BUILD_TAG = 'v49';
   function toggleSettings() {
     settingsOpen = !settingsOpen;
     if (settingsOpen) { if (manageOpen) { manageOpen = false; managePanel.classList.remove('show'); } if (expOpen) { expOpen = false; expPanel.classList.remove('show'); } }
@@ -1998,6 +2086,7 @@
     rival: function () { return rivalGet(); },
     triggerRival: function () { rivalPending = false; var r = rivalGet(); r.race = null; rivalSet(r); showRivalChallenge(); },
     raceProgress: function () { var r = rivalGet(); return r.race ? { kind: r.race.kind, prog: raceCounter(r.race.kind) - r.race.base, target: r.race.target } : null; },
+    fleet: function () { refreshFleet(); return { expedition: fleet.exp.length, route: fleet.routes.length, rival: fleet.rival ? 1 : 0 }; },
     startFever: function (secs) { startFever(secs); }, fever: function () { return { active: feverActive(), combo: combo, mult: +comboMult().toFixed(2), coins: feverLayer ? feverLayer.querySelectorAll('.coin').length : 0 }; }, collectCoins: function () { if (feverLayer) feverLayer.querySelectorAll('.coin').forEach(function (c) { collectCoin(c); }); },
     season: function () { return { id: seasonId(), theme: seasonTheme(), points: seasonGet().points, claimed: seasonGet().claimed.slice(), daysLeft: seasonDaysLeft(), tiers: PASS_TIERS.length }; }, addSeasonPoints: function (n) { seasonAdd(n); updateHUD(); }, claimPass: function (i) { return claimPass(i); },
     fortune: function () { if (window.Retention) Retention.set(GAME, 'fortuneDay', null); showStreak(); return !!(fortuneModal && fortuneModal.classList.contains('show')); }, drawFortune: function () { var b = fortuneModal && fortuneModal.querySelector('#ft-btns .ev-btn'); if (b) b.click(); }
