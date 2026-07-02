@@ -132,8 +132,8 @@
   var F_MAIN = `#version 300 es
   precision highp float;
   in vec3 vN; in vec3 vW; in vec2 vUV; in vec4 vLP; in vec3 vCol;
-  uniform vec3 uSunDir, uSunCol, uAmbTop, uAmbBot, uCam, uFog, uBase, uWin;
-  uniform float uFogD, uRough, uTexMix, uShadowOn, uVCol, uExposure, uSat, uNight, uTime, uToon, uAlbedo;
+  uniform vec3 uSunDir, uSunCol, uAmbTop, uAmbBot, uCam, uFog, uBase, uWin, uShadowTint;
+  uniform float uFogD, uRough, uTexMix, uShadowOn, uVCol, uExposure, uSat, uNight, uTime, uToon, uAlbedo, uShadowK;
   uniform sampler2D uShadow; uniform sampler2D uTex;
   out vec4 frag;
   float shadow(vec4 lp){
@@ -145,6 +145,7 @@
     return s/9.0;
   }
   vec3 aces(vec3 x){ float a=2.51,b=0.03,c=2.43,d=0.59,e=0.14; return clamp((x*(a*x+b))/(x*(c*x+d)+e),0.0,1.0); }
+  float dth(vec2 p){ return fract(sin(dot(p,vec2(41.3,289.1)))*43758.5453); }
   void main(){
     vec3 N=normalize(vN);
     vec3 base = uVCol>0.5 ? vCol : uBase;
@@ -163,7 +164,11 @@
     float specK = (uToon>0.5?0.22:0.5)*(1.0-uRough);
     float spec=pow(max(dot(N,H),0.0), mix(8.0,80.0,1.0-uRough))*specK*sh*ndl;
     vec3 amb=mix(uAmbBot,uAmbTop,N.y*0.5+0.5);
-    vec3 col = base*(amb + uSunCol*diff) + uSunCol*spec + uSunCol*rim;
+    // warm-key / cool-shadow chromatic ramp: as the banded diffuse falls, shift the surface
+    // toward the biome's cool shadow tint (shadow bands cool, sun-lit bands stay warm).
+    float lit = clamp(diff*1.7, 0.0, 1.0);
+    vec3 ramp = mix(uShadowTint, vec3(1.0), mix(1.0, lit, uShadowK));
+    vec3 col = base*ramp*(amb + uSunCol*diff) + uSunCol*spec + uSunCol*rim;
     // soft dark silhouette edge for a hand-drawn / animated-cartoon outline feel
     float edge = uToon>0.5 ? pow(1.0-max(dot(N,V),0.0),3.5) : 0.0;
     col *= 1.0 - edge*0.30;
@@ -173,6 +178,7 @@
     float dist=length(uCam-vW); float f=1.0-exp(-uFogD*dist); col=mix(col,uFog,clamp(f,0.0,1.0));
     col*=uExposure;
     float luma=dot(col,vec3(0.299,0.587,0.114)); col=mix(vec3(luma),col,uSat);
+    col += (dth(gl_FragCoord.xy)-0.5)/255.0;   // hash dither kills mobile gradient banding
     frag=vec4(aces(col),1.0);
   }`;
 
