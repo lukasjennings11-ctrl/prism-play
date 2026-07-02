@@ -130,18 +130,59 @@
     });
   }
 
-  // ---- day/night ----
+  // ---- day/night: authored time-of-day colour scripts (Phase 10a) ----
+  // Four keyframed moods — night / dawn / day / dusk — smoothly interpolated by tod.
+  // Each defines sky top/bot, sun colour, hemisphere ambient, fog colour+density and
+  // how strongly shadows shift toward the biome's cool shadowTint. The keys are built
+  // from the biome palette so every world keeps its identity across the whole cycle.
+  function m3(c, m) { return [c[0] * m[0], c[1] * m[1], c[2] * m[2]]; }
+  function lerp3(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
+  function todKeys() {
+    var b = biome;
+    var night = { // cool blue-violet, moonlit; stars + window glow carry the magic
+      top: m3(b.skyTop, [0.10, 0.14, 0.34]), bot: m3(b.skyBot, [0.09, 0.13, 0.30]),
+      sun: [0.16, 0.22, 0.38],
+      ambTop: [0.16, 0.21, 0.38], ambBot: [0.09, 0.11, 0.22],
+      fog: m3(b.fog, [0.09, 0.12, 0.26]), fogD: 0.0011, shadowK: 0.40, water: [0.11, 0.15, 0.42]
+    };
+    var dawn = { // golden-pink sunrise: violet zenith, peach horizon, long warm light
+      top: lerp3(m3(b.skyTop, [0.52, 0.48, 0.80]), [0.46, 0.36, 0.66], 0.35),
+      bot: lerp3(m3(b.skyBot, [1.00, 0.72, 0.62]), [1.10, 0.62, 0.46], 0.5),
+      sun: [1.42, 0.92, 0.56],
+      ambTop: [0.42, 0.37, 0.54], ambBot: [0.32, 0.22, 0.28],
+      fog: lerp3(m3(b.fog, [1.0, 0.72, 0.62]), [1.02, 0.62, 0.5], 0.4), fogD: 0.0009, shadowK: 0.78, water: [0.74, 0.64, 0.68]
+    };
+    var day = { // bright, clean, cheerful — the biome palette as painted
+      top: b.skyTop.slice(), bot: b.skyBot.slice(), sun: b.sun.slice(),
+      ambTop: [0.50, 0.56, 0.70], ambBot: [0.27, 0.245, 0.225],
+      fog: b.fog.slice(), fogD: 0.00055, shadowK: 0.55, water: [1, 1, 1]
+    };
+    var dusk = { // molten gold-rose sunset, a touch redder than dawn
+      top: lerp3(m3(b.skyTop, [0.46, 0.40, 0.74]), [0.42, 0.30, 0.60], 0.4),
+      bot: lerp3(m3(b.skyBot, [1.05, 0.66, 0.52]), [1.15, 0.55, 0.36], 0.55),
+      sun: [1.48, 0.86, 0.44],
+      ambTop: [0.42, 0.33, 0.50], ambBot: [0.33, 0.21, 0.25],
+      fog: lerp3(m3(b.fog, [1.02, 0.66, 0.54]), [1.05, 0.55, 0.42], 0.45), fogD: 0.0009, shadowK: 0.78, water: [0.76, 0.60, 0.64]
+    };
+    // sun crosses the horizon at tod≈0.23 / 0.77 (see sunDir) — keys straddle those moments
+    return [[0.00, night], [0.185, night], [0.25, dawn], [0.34, day], [0.66, day], [0.755, dusk], [0.84, night], [1.00, night]];
+  }
   function env() {
     var day = (1 - Math.cos(tod * Math.PI * 2)) / 2;          // 0 night .. 1 noon
     var night = clamp(1 - day * 1.7, 0, 1);
-    var warm = clamp(1 - Math.abs(day - 0.16) * 2.2, 0, 1) * 0.6;   // dawn/dusk glow
-    function s(c, k) { return [c[0] * k, c[1] * k, c[2] * k]; }
-    function lerp3(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
-    var top = s(biome.skyTop, 0.16 + 0.9 * day);
-    var bot = lerp3(s(biome.skyBot, 0.2 + 0.85 * day), [1.0, 0.55, 0.3], warm);
-    var sun = s(biome.sun, 0.3 + 0.8 * day);
-    var fog = lerp3(s(biome.fog, 0.22 + 0.85 * day), [1.0, 0.6, 0.4], warm * 0.6);
-    return { day: day, night: night, top: top, bot: bot, sun: sun, fog: fog };
+    var K = todKeys(), a = K[0], b = K[K.length - 1], i;
+    for (i = 1; i < K.length; i++) if (K[i][0] >= tod) { a = K[i - 1]; b = K[i]; break; }
+    var span = Math.max(1e-5, b[0] - a[0]), t = clamp((tod - a[0]) / span, 0, 1);
+    t = t * t * (3 - 2 * t);                                   // smoothstep between keys
+    var A = a[1], B = b[1];
+    return {
+      day: day, night: night,
+      top: lerp3(A.top, B.top, t), bot: lerp3(A.bot, B.bot, t),
+      sun: lerp3(A.sun, B.sun, t), fog: lerp3(A.fog, B.fog, t),
+      ambTop: lerp3(A.ambTop, B.ambTop, t), ambBot: lerp3(A.ambBot, B.ambBot, t),
+      water: lerp3(A.water, B.water, t),
+      fogD: A.fogD + (B.fogD - A.fogD) * t, shadowK: A.shadowK + (B.shadowK - A.shadowK) * t
+    };
   }
   function sunDir() { var ang = (tod - 0.25) * Math.PI * 2, y = Math.max(0.07, Math.sin(ang) * 0.9 + 0.12); return norm([Math.cos(ang) * 0.7, y, 0.42]); }
   function norm(v) { var l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; }
@@ -172,15 +213,22 @@
     gl.uniform1f(M.u.uAlbedo, 0);
   }
 
-  // soft contact shadows: flat dark radial decals on the ground under objects (no shadow map)
-  function drawBlobs() {
+  // soft contact shadows: flat dark radial decals on the ground under objects (no shadow map).
+  // Coupled to the sun: low sun = longer, softer shadows stretched away from the light.
+  function drawBlobs(sd) {
     if (!blobTex || !scene.blobs || !scene.blobs.length) return;
+    sd = sd || sunDir();
+    var sunY = clamp(sd[1], 0.07, 1);
+    var str = 0.34 * clamp(0.30 + sunY * 1.25, 0.30, 1.0);              // fainter as the sun sinks
+    var stretch = clamp(1.0 + (0.55 - sunY) * 1.4, 1.0, 1.85);          // longer at low sun
+    var yaw = Math.atan2(-sd[0], -sd[2]);                               // stretch away from the light
+    var hh = Math.hypot(sd[0], sd[2]) || 1, ox = -sd[0] / hh, oz = -sd[2] / hh;
     var Bp = E.P_blob; gl.useProgram(Bp.p); gl.uniformMatrix4fv(Bp.u.uVP, false, mVP);
-    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, blobTex); gl.uniform1i(Bp.u.uTex, 1); gl.uniform1f(Bp.u.uStr, 0.34);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, blobTex); gl.uniform1i(Bp.u.uTex, 1); gl.uniform1f(Bp.u.uStr, str);
     gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); gl.disable(gl.CULL_FACE);
     for (var i = 0; i < scene.blobs.length; i++) {
-      var b = scene.blobs[i], y = HARBOR_MODELS.heightAt(b.x, b.z) + 0.06;
-      compose(mModel, b.x, y, b.z, b.r, 1, b.r); gl.uniformMatrix4fv(Bp.u.uModel, false, mModel);
+      var b = scene.blobs[i], y = HARBOR_MODELS.heightAt(b.x, b.z) + 0.06, sh = (stretch - 1) * b.r * 0.4;
+      composeRYS(mModel, b.x + ox * sh, y, b.z + oz * sh, b.r, 1, b.r * stretch, yaw); gl.uniformMatrix4fv(Bp.u.uModel, false, mModel);
       drawMesh(Bp, E.blobQuad);
     }
     gl.depthMask(true); gl.disable(gl.BLEND); gl.enable(gl.CULL_FACE);
@@ -369,9 +417,10 @@
     var M = E.P_main; gl.useProgram(M.p);
     gl.uniformMatrix4fv(M.u.uVP, false, mVP);
     gl.uniform3fv(M.u.uSunDir, sd); gl.uniform3fv(M.u.uSunCol, en.sun);
-    gl.uniform3fv(M.u.uAmbTop, [0.42 * (0.5 + en.day * 0.8), 0.47 * (0.5 + en.day * 0.8), 0.58 * (0.5 + en.day * 0.8)]);
-    gl.uniform3fv(M.u.uAmbBot, [0.18, 0.19, 0.22]);
-    gl.uniform3fv(M.u.uCam, ev); gl.uniform3fv(M.u.uFog, en.bot); gl.uniform1f(M.u.uFogD, 0.0);  // no fog — crisp distance
+    gl.uniform3fv(M.u.uAmbTop, en.ambTop);                      // authored ToD ambient (sky bounce)
+    gl.uniform3fv(M.u.uAmbBot, en.ambBot);                      // authored ToD ambient (ground bounce)
+    gl.uniform3fv(M.u.uShadowTint, biome.shadowTint || [0.68, 0.72, 1.06]); gl.uniform1f(M.u.uShadowK, en.shadowK);
+    gl.uniform3fv(M.u.uCam, ev); gl.uniform3fv(M.u.uFog, en.fog); gl.uniform1f(M.u.uFogD, en.fogD);  // gentle authored distance fog
     gl.uniform3fv(M.u.uWin, [1.0, 0.82, 0.46]); gl.uniform1f(M.u.uNight, en.night); gl.uniform1f(M.u.uTime, clock);
     gl.uniform1f(M.u.uExposure, 1.6); gl.uniform1f(M.u.uSat, 1.36); gl.uniform1f(M.u.uShadowOn, 0);
     gl.uniform1f(M.u.uToon, 1); gl.uniform1f(M.u.uVCol, 1); gl.uniform1f(M.u.uAlbedo, 0);
@@ -405,13 +454,14 @@
     }
 
     // soft contact shadows
-    drawBlobs();
+    drawBlobs(sd);
 
     // water
     var W = E.P_water; gl.useProgram(W.p); gl.uniformMatrix4fv(W.u.uVP, false, mVP); gl.uniform1f(W.u.uTime, clock);
     gl.uniform3fv(W.u.uCam, ev); gl.uniform3fv(W.u.uSunDir, sd); gl.uniform3fv(W.u.uSunCol, en.sun);
-    gl.uniform3fv(W.u.uDeep, biome.deep); gl.uniform3fv(W.u.uShallow, biome.shallow);
-    gl.uniform3fv(W.u.uSky, en.bot); gl.uniform3fv(W.u.uFog, en.bot); gl.uniform1f(W.u.uFogD, 0.0);
+    gl.uniform3fv(W.u.uDeep, m3(biome.deep, en.water)); gl.uniform3fv(W.u.uShallow, m3(biome.shallow, en.water));   // ToD-lit water body
+    gl.uniform3fv(W.u.uSky, en.bot); gl.uniform3fv(W.u.uSkyTop, en.top);   // water mirrors the sky gradient
+    gl.uniform3fv(W.u.uFog, en.fog); gl.uniform1f(W.u.uFogD, en.fogD);
     gl.uniform1f(W.u.uExposure, 1.58); gl.uniform1f(W.u.uSat, 1.25);
     gl.disable(gl.CULL_FACE); drawMesh(W, waterMesh); gl.enable(gl.CULL_FACE);
   }
@@ -1700,7 +1750,7 @@
     updateHUD();
   }
 
-  var BUILD_TAG = 'v49';
+  var BUILD_TAG = 'v50';
   function toggleSettings() {
     settingsOpen = !settingsOpen;
     if (settingsOpen) { if (manageOpen) { manageOpen = false; managePanel.classList.remove('show'); } if (expOpen) { expOpen = false; expPanel.classList.remove('show'); } }
@@ -2051,6 +2101,7 @@
   window.__harbor = {
     state: function () { return { biome: biomeId, era: era, founded: !!founded[biomeId], port: founded[biomeId] || null, sites: sites.length, sel: selSite, worlds: HARBOR_BIOME_ORDER.slice(), unlocked: unlocked.slice(), city: scene.city.length, crane: scene.crane, assets: !!(cityModels && atlasTex), tod: Math.round(tod * 1000) / 1000, cam: { az: +C.az.toFixed(2), el: +C.el.toFixed(2), dist: Math.round(C.dist), tx: Math.round(C.tx), tz: Math.round(C.tz) }, webgl: !!gl, phase: 'world-4.3' }; },
     setBiome: function (id) { if (E) buildBiome(id); }, setTod: function (t) { tod = t % 1; }, pause: function (p) { paused = !!p; },
+    env: function () { return biome ? env() : null; },   // debug: current ToD colour script values
     setEra: function (n) { era = Math.max(0, n | 0); if (SIM && SIM.raw() && SIM.raw().founded) SIM.setEra(era); if (window.Retention) Retention.set(GAME, 'era', era); if (E) { buildBiome(biomeId); updateHUD(); } },
     econ: function () { return SIM ? SIM.state() : null; },
     setFocus: function (f, id) { var r = SIM ? SIM.setFocus(id == null ? null : id, f) : false; if (r) { updateHUD(); if (manageOpen) renderManage(); } return r; },

@@ -102,6 +102,20 @@ function ok(name, cond) { if (cond) pass++; else { fail++; fails.push(name); } }
   ok('prestige: relic-set META bonus persists', after.slots >= 1);
   ok('prestige: WebGL still alive', after.webgl);
 
+  // Phase 10a: colour & light — authored time-of-day scripts + fog + shadow ramp
+  const envDay = await page.evaluate(() => { window.__harbor.setTod(0.5); return window.__harbor.env(); });
+  const envNight = await page.evaluate(() => { window.__harbor.setTod(0.0); return window.__harbor.env(); });
+  ok('env: day vs night differ meaningfully (sky + sun authored per ToD)',
+    envDay && envNight && (envDay.top[1] - envNight.top[1]) > 0.15 && (envDay.sun[0] - envNight.sun[0]) > 0.3);
+  ok('env: distance fog enabled, stronger at night', envDay.fogD > 0 && envNight.fogD > envDay.fogD);
+  ok('env: ToD ambient + cool-shadow ramp exposed', Array.isArray(envDay.ambTop) && Array.isArray(envDay.ambBot) &&
+    envDay.shadowK > 0 && envNight.ambTop[2] > envNight.ambTop[0]);   // night ambient leans blue
+  const envDusk = await page.evaluate(() => { window.__harbor.setTod(0.755); return window.__harbor.env(); });
+  ok('env: dusk is golden (red channel leads blue at the horizon)', envDusk.bot[0] > envDusk.bot[2] && envDusk.sun[0] > envDusk.sun[2]);
+  const errsBeforeSweep = errs.length;
+  for (const t of [0, 0.25, 0.3, 0.5, 0.8, 0.9]) { await page.evaluate(tt => window.__harbor.setTod(tt), t); await sleep(150); }
+  ok('env: full ToD sweep renders with zero GL/console errors', errs.length === errsBeforeSweep);
+
   // live ticking after everything — no late errors
   await sleep(2000);
   ok('stability: zero console/page errors', errs.length === 0);
