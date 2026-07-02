@@ -43,6 +43,9 @@ function near(a, b, eps) { return Math.abs(a - b) <= (eps || 1e-6); }
   ok('migrate: voyages backfilled', Array.isArray(S.voyages));
   ok('migrate: snapshot has event field', snap && ('event' in snap));
   ok('migrate: snapshot has voyages field', snap && snap.voyages && Array.isArray(snap.voyages.active));
+  // Phase 9a: patch() must backfill focus:'none' on a save that predates specialisation
+  ok('migrate: focus backfilled to none', S.ports.green.focus === 'none');
+  ok('migrate: snapshot exposes synergies + focus', snap && Array.isArray(snap.synergies) && snap.synergies.length === 4 && snap.focus === 'none');
 })();
 
 // ---------------------------------------------------------------- deterministic setup
@@ -142,6 +145,96 @@ var S = SIM.raw();
   ok('balance: money non-negative', st.money >= 0);
   ok('balance: lifetime monotonic (never shrinks)', monotonic);
   ok('balance: prestige gain scales with lifetime', SIM.prestigeGain() >= 0 && isFinite(SIM.prestigeGain()));
+})();
+
+// ---------------------------------------------------------------- Phase 9a: synergies + focus
+// Deterministic: tickPort() has no RNG; a fresh seeded port + zeroed resources gives exact ratios.
+function buildSet(list) {
+  SIM.__setRng(mulberry32(4242));
+  SIM.newGame(); SIM.foundPort('green'); SIM.setEra(3);
+  SIM.raw().money = 1e9;
+  list.forEach(function (t) { if (SIM.canBuild(t)) SIM.build(t); });
+  return SIM.port('green');
+}
+
+(function synergyComposition() {
+  // warehouse + market → +12% sales (prod unchanged)
+  buildSet(['warehouse', 'market']);
+  var m = SIM.synergyMul('green');
+  ok('synergyMul: tradehub → sales +12%', near(m.sales, 1.12) && near(m.prod, 1));
+  // ≥3 cottages → +15% production (labour/production)
+  buildSet(['cottage', 'cottage', 'cottage']);
+  var m2 = SIM.synergyMul('green');
+  ok('synergyMul: boomtown (3 cottages) → prod +15%', near(m2.prod, 1.15) && near(m2.sales, 1));
+  // two cottages is NOT enough → no boomtown
+  buildSet(['cottage', 'cottage']);
+  ok('synergyMul: 2 cottages → no boomtown', near(SIM.synergyMul('green').prod, 1));
+  // sawmill + factory → +15% goods (prod channel)
+  buildSet(['sawmill', 'factory']);
+  var m3 = SIM.synergyMul('green');
+  ok('synergyMul: mill&forge → prod +15%', near(m3.prod, 1.15) && near(m3.sales, 1));
+  // market + dock → +10% sales
+  buildSet(['market', 'dock']);
+  var m4 = SIM.synergyMul('green');
+  ok('synergyMul: free port → sales +10%', near(m4.sales, 1.10) && near(m4.prod, 1));
+  // no combo → neutral
+  buildSet(['fishing_hut']);
+  var m5 = SIM.synergyMul('green');
+  ok('synergyMul: lone building → neutral 1/1', near(m5.prod, 1) && near(m5.sales, 1));
+  // stacking: warehouse+market+dock → tradehub(0.12)+freeport(0.10) = 1.22 sales
+  buildSet(['warehouse', 'market', 'dock']);
+  ok('synergyMul: tradehub + freeport stack → sales 1.22', near(SIM.synergyMul('green').sales, 1.22));
+})();
+
+(function snapshotSynergyFocus() {
+  buildSet(['warehouse', 'market']);
+  SIM.setFocus('green', 'industry');
+  var st = SIM.state();
+  ok('snapshot: synergies array (4 entries)', Array.isArray(st.synergies) && st.synergies.length === 4);
+  var hub = st.synergies.filter(function (x) { return x.id === 'tradehub'; })[0];
+  ok('snapshot: tradehub active with warehouse+market', !!hub && hub.active === true);
+  var boom = st.synergies.filter(function (x) { return x.id === 'boomtown'; })[0];
+  ok('snapshot: boomtown inactive (no cottages)', !!boom && boom.active === false);
+  ok('snapshot: focus reflects setFocus', st.focus === 'industry');
+  ok('setFocus: rejects unknown focus', SIM.setFocus('green', 'bogus') === false && SIM.state().focus === 'industry');
+})();
+
+(function focusProduction() {
+  // fish production tradeoffs — labour saturated so only the focus multiplier varies
+  var p = buildSet(['fishing_hut', 'fishing_hut', 'cottage', 'cottage', 'cottage']);
+  function fishGain(focus) {
+    SIM.setFocus('green', focus);
+    p.res.fish = 0; p.res.timber = 0; p.res.goods = 0; p.demand = { fish: 1, timber: 1, goods: 1 };
+    SIM.tick(1); return p.res.fish;
+  }
+  var none = fishGain('none');
+  ok('focus fishing: +25% fish vs none', near(fishGain('fishing') / none, 1.25, 0.02));
+  ok('focus industry: −15% fish vs none', near(fishGain('industry') / none, 0.85, 0.02));
+  ok('focus trade: −10% raw fish vs none', near(fishGain('trade') / none, 0.90, 0.02));
+
+  // goods production tradeoffs (factory convert; ample timber so it isn't input-limited)
+  var q = buildSet(['sawmill', 'factory', 'cottage', 'cottage', 'cottage']);
+  function goodsGain(focus) {
+    SIM.setFocus('green', focus);
+    q.res.fish = 0; q.res.timber = 500; q.res.goods = 0; q.demand = { fish: 1, timber: 1, goods: 1 };
+    SIM.tick(1); return q.res.goods;
+  }
+  var g0 = goodsGain('none');
+  ok('focus industry: +25% goods vs none', near(goodsGain('industry') / g0, 1.25, 0.03));
+  ok('focus fishing: −15% goods vs none', near(goodsGain('fishing') / g0, 0.85, 0.03));
+})();
+
+(function focusSales() {
+  // trade focus lifts sale revenue (money delta) — fish stock is large so selling isn't prod-limited
+  var p = buildSet(['fishing_hut', 'jetty', 'cottage', 'cottage']);
+  function moneyGain(focus) {
+    SIM.setFocus('green', focus);
+    var st = SIM.raw(); st.money = 100000;
+    p.res.fish = 400; p.res.timber = 0; p.res.goods = 0; p.demand = { fish: 1, timber: 1, goods: 1 };
+    var before = st.money; SIM.tick(1); return st.money - before;
+  }
+  var none = moneyGain('none'), trade = moneyGain('trade');
+  ok('focus trade: +15% sales lifts money delta', trade > none);
 })();
 
 console.log((fail === 0 ? 'ALL PASS' : 'FAILED') + ' — ' + pass + ' passed, ' + fail + ' failed');
