@@ -132,8 +132,8 @@
   var F_MAIN = `#version 300 es
   precision highp float;
   in vec3 vN; in vec3 vW; in vec2 vUV; in vec4 vLP; in vec3 vCol;
-  uniform vec3 uSunDir, uSunCol, uAmbTop, uAmbBot, uCam, uFog, uBase, uWin;
-  uniform float uFogD, uRough, uTexMix, uShadowOn, uVCol, uExposure, uSat, uNight, uTime, uToon, uAlbedo;
+  uniform vec3 uSunDir, uSunCol, uAmbTop, uAmbBot, uCam, uFog, uBase, uWin, uShadowTint;
+  uniform float uFogD, uRough, uTexMix, uShadowOn, uVCol, uExposure, uSat, uNight, uTime, uToon, uAlbedo, uShadowK;
   uniform sampler2D uShadow; uniform sampler2D uTex;
   out vec4 frag;
   float shadow(vec4 lp){
@@ -145,6 +145,7 @@
     return s/9.0;
   }
   vec3 aces(vec3 x){ float a=2.51,b=0.03,c=2.43,d=0.59,e=0.14; return clamp((x*(a*x+b))/(x*(c*x+d)+e),0.0,1.0); }
+  float dth(vec2 p){ return fract(sin(dot(p,vec2(41.3,289.1)))*43758.5453); }
   void main(){
     vec3 N=normalize(vN);
     vec3 base = uVCol>0.5 ? vCol : uBase;
@@ -163,7 +164,11 @@
     float specK = (uToon>0.5?0.22:0.5)*(1.0-uRough);
     float spec=pow(max(dot(N,H),0.0), mix(8.0,80.0,1.0-uRough))*specK*sh*ndl;
     vec3 amb=mix(uAmbBot,uAmbTop,N.y*0.5+0.5);
-    vec3 col = base*(amb + uSunCol*diff) + uSunCol*spec + uSunCol*rim;
+    // warm-key / cool-shadow chromatic ramp: as the banded diffuse falls, shift the surface
+    // toward the biome's cool shadow tint (shadow bands cool, sun-lit bands stay warm).
+    float lit = clamp(diff*1.7, 0.0, 1.0);
+    vec3 ramp = mix(uShadowTint, vec3(1.0), mix(1.0, lit, uShadowK));
+    vec3 col = base*ramp*(amb + uSunCol*diff) + uSunCol*spec + uSunCol*rim;
     // soft dark silhouette edge for a hand-drawn / animated-cartoon outline feel
     float edge = uToon>0.5 ? pow(1.0-max(dot(N,V),0.0),3.5) : 0.0;
     col *= 1.0 - edge*0.30;
@@ -173,6 +178,7 @@
     float dist=length(uCam-vW); float f=1.0-exp(-uFogD*dist); col=mix(col,uFog,clamp(f,0.0,1.0));
     col*=uExposure;
     float luma=dot(col,vec3(0.299,0.587,0.114)); col=mix(vec3(luma),col,uSat);
+    col += (dth(gl_FragCoord.xy)-0.5)/255.0;   // hash dither kills mobile gradient banding
     frag=vec4(aces(col),1.0);
   }`;
 
@@ -198,6 +204,7 @@
       float star=step(0.965,h)*pt*tw*smoothstep(0.20,0.62,vUv.y);
       c+=vec3(0.92,0.95,1.0)*star*uNight*1.25;
     }
+    c += (hash(gl_FragCoord.xy)-0.5)/255.0;   // dither the big gradient
     frag=vec4(aces(c*1.05),1.0); }`;
 
   var V_WATER = `#version 300 es
@@ -208,18 +215,22 @@
     float dz=cos(p.z*0.23-t*0.9)*0.021+cos((p.x+p.z)*0.4+t*1.7)*0.016;
     vN=normalize(vec3(-dx,1.0,-dz)); vW=p; gl_Position=uVP*vec4(p,1.0); }`;
   var F_WATER = `#version 300 es
-  precision highp float; in vec3 vW; in vec3 vN; uniform vec3 uCam,uSunDir,uSunCol,uDeep,uShallow,uSky,uFog; uniform float uFogD,uExposure,uSat;
+  precision highp float; in vec3 vW; in vec3 vN; uniform vec3 uCam,uSunDir,uSunCol,uDeep,uShallow,uSky,uSkyTop,uFog; uniform float uFogD,uExposure,uSat;
   out vec4 frag;
   vec3 aces(vec3 x){ float a=2.51,b=0.03,c=2.43,d=0.59,e=0.14; return clamp((x*(a*x+b))/(x*(c*x+d)+e),0.0,1.0); }
+  float dth(vec2 p){ return fract(sin(dot(p,vec2(41.3,289.1)))*43758.5453); }
   void main(){ vec3 N=normalize(vN); vec3 V=normalize(uCam-vW);
     float fres=pow(1.0-max(dot(N,V),0.0),3.0); fres=floor(fres*3.0+0.2)/3.0;   // banded reflection
     float depthMix=floor(clamp(N.y*0.5+0.4,0.0,1.0)*3.0)/3.0+0.18;             // banded shallow/deep
     vec3 water=mix(uDeep,uShallow,clamp(depthMix,0.0,1.0));
-    vec3 col=mix(water,uSky,clamp(fres*0.78,0.0,1.0));
+    // mirror the sky GRADIENT: steep reflected rays see the zenith, grazing rays the horizon
+    vec3 R=reflect(-V,N); vec3 sky=mix(uSky,uSkyTop,pow(clamp(R.y,0.0,1.0),0.6));
+    vec3 col=mix(water,sky,clamp(fres*0.78,0.0,1.0));
     vec3 H=normalize(uSunDir+V); float gl=pow(max(dot(N,H),0.0),140.0); col+=uSunCol*smoothstep(0.35,0.75,gl)*0.85; // soft toon glint
     float foam=smoothstep(0.972,0.90,N.y); col+=vec3(0.90,0.95,1.0)*foam*0.10;  // gentle foam on wave faces
     float dist=length(uCam-vW); float f=1.0-exp(-uFogD*dist); col=mix(col,uFog,clamp(f,0.0,1.0));
     col*=uExposure; float luma=dot(col,vec3(0.299,0.587,0.114)); col=mix(vec3(luma),col,uSat);
+    col += (dth(gl_FragCoord.xy)-0.5)/255.0;
     frag=vec4(aces(col),1.0); }`;
 
   // soft contact-shadow blob: a flat ground decal with radial alpha (no shadow map → no "cloud shadows")
@@ -242,7 +253,9 @@
       gl.bindVertexArray(null);
       return { vao: vao, count: d.indices.length, itype: (d.indices instanceof Uint32Array) ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT };
     }
-    function texture(canvas) { var t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas); gl.generateMipmap(gl.TEXTURE_2D); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); return t; }
+    var aniso = gl.getExtension('EXT_texture_filter_anisotropic') || gl.getExtension('WEBKIT_EXT_texture_filter_anisotropic') || gl.getExtension('MOZ_EXT_texture_filter_anisotropic');
+    var anisoMax = aniso ? Math.min(8, gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT) || 1) : 0;
+    function texture(canvas) { var t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas); gl.generateMipmap(gl.TEXTURE_2D); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); if (aniso && anisoMax > 1) gl.texParameterf(gl.TEXTURE_2D, aniso.TEXTURE_MAX_ANISOTROPY_EXT, anisoMax); return t; }
 
     var SH = 2048, shadowTex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, shadowTex);
