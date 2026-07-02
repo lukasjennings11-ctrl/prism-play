@@ -58,12 +58,24 @@ function ok(name, cond) { if (cond) pass++; else { fail++; fails.push(name); } }
   await page.evaluate(() => ['carto0', 'carto1', 'carto2'].forEach(id => window.__harbor.grantRelic(id)));
   ok('relics: cartographer set → +1 voyage slot in META', await page.evaluate(() => window.HARBOR_SIM.meta().voyageSlots >= 1));
 
+  // living fleet (Phase 9b): visible expedition ships derive from the voyage list
+  ok('fleet: empty baseline', await page.evaluate(() => { var f = window.__harbor.fleet(); return f.expedition === 0 && f.route === 0 && f.rival === 0; }));
+  await page.evaluate(() => { window.HARBOR_SIM.raw().money = 1e6; window.__harbor.startVoyage('reef'); });
+  ok('fleet: expedition ship at sea while voyage active', await page.evaluate(() => window.__harbor.fleet().expedition === 1));
+  await page.evaluate(() => { window.HARBOR_SIM.raw().voyages[0].endsAt = Date.now() - 1; var v = window.__harbor.voyages().active[0]; window.__harbor.collectVoyage(v.seq); });
+  ok('fleet: expedition ship gone after collect', await page.evaluate(() => window.__harbor.fleet().expedition === 0));
+  // living fleet: a route touching the active port spawns a shuttling cargo ship
+  await page.evaluate(() => { var S = window.HARBOR_SIM; S.foundPort('tropical'); S.setActive('green'); S.raw().money = 1e6; S.addRoute('green', 'tropical', 'fish'); });
+  ok('fleet: cargo ship shuttles the active-port route', await page.evaluate(() => window.__harbor.fleet().route === 1));
+
   // rival race → win
   await page.evaluate(() => window.__harbor.triggerRival()); await sleep(120);
   await page.evaluate(() => { var bs = document.querySelectorAll('#rivalmodal .ev-btn'); if (bs.length) bs[bs.length - 1].click(); }); await sleep(120);
+  ok('fleet: rival ship patrols during the race', await page.evaluate(() => window.__harbor.fleet().rival === 1));
   await page.evaluate(() => { var r = window.__harbor.rival().race; if (r) window.HARBOR_SIM.raw().lifetimeMoney += r.target + 10; window.__harbor.forceHUD(); }); await sleep(150);
   await page.evaluate(() => { var b = document.querySelector('#rivalmodal.show .ev-btn'); if (b) b.click(); });
   ok('rival: race won recorded', await page.evaluate(() => window.__harbor.rival().wins >= 1));
+  ok('fleet: rival ship gone after the race resolves', await page.evaluate(() => window.__harbor.fleet().rival === 0));
 
   // fever
   await page.evaluate(() => window.__harbor.startFever(3)); await sleep(400);
